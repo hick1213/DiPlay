@@ -33,9 +33,6 @@ DEFAULT_APK = Path("/Users/hick/github/DiPlay/car-market-kit/APKs/tvbox-android4
 DEFAULT_DIAGNOSTIC_APK = Path(
     "/Users/hick/github/DiPlay/car-market-kit/APKs/car-probe-whitelist-title-navi-v11.apk"
 )
-DEFAULT_DIPLAY_APK = Path(
-    "/Users/hick/github/DiPlay/car-market-kit/APKs/diplay-legacy-android42-sogou-map-formal-20261025.apk"
-)
 DEFAULT_LAN_CAST_APK = Path(
     "/Users/hick/github/DiPlay/car-market-kit/APKs/lan-cast-android42-v1.apk"
 )
@@ -96,7 +93,7 @@ class HookServerBundle:
             self.http.diagnostic_apk = diagnostic_apk
             self.http.additional_apks = {}
             for route, (apk, label) in (additional_apks or {}).items():
-                if route not in ("/diplay-android42.apk", "/diplay-android42-toolbar-voice-v12.apk",
+                if route not in ("/diplay-android42-toolbar-voice-v12.apk",
                                  "/lan-cast-android42.apk"):
                     raise ValueError("不支持的额外下载路径：{}".format(route))
                 validated = Path(apk).resolve(strict=True)
@@ -239,7 +236,6 @@ def display_setup(address, http_port, tcp_port, proxy_port, network=None, mfi_te
     print("  诊断 v11：http://{}:{}/car-probe-settings.apk".format(address, http_port))
     print("  Root / 安装限制 Dump 上传：在 v11 填 Mac IP {}，无需验证码，手动点击确认。".format(address))
     print("  ZIP 保存到 car-market-kit/dumps；只在可信隔离 Wi-Fi 中运行接收服务。")
-    print("  DiPlay Android 4.2：http://{}:{}/diplay-android42.apk".format(address, http_port))
     if mfi_test:
         print("  DiPlay Android Back 自动隐藏 + 语音诊断 v12：http://{}:{}/diplay-android42-toolbar-voice-v12.apk".format(address, http_port))
     print("  局域网投屏：http://{}:{}/lan-cast-android42.apk".format(address, http_port))
@@ -271,7 +267,6 @@ def main(argv=None):
                         help="监听地址；默认 0.0.0.0，下载地址仍使用 --lan-ip / --interface")
     parser.add_argument("--apk", type=Path, default=DEFAULT_APK)
     parser.add_argument("--diagnostic-apk", type=Path, default=DEFAULT_DIAGNOSTIC_APK)
-    parser.add_argument("--diplay-apk", type=Path, default=DEFAULT_DIPLAY_APK)
     parser.add_argument("--mfi-test-apk", type=Path, default=None,
                         help="可选的私有 MFi 实验 APK；不会公开单独的密钥文件")
     parser.add_argument("--lan-cast-apk", type=Path, default=DEFAULT_LAN_CAST_APK)
@@ -327,7 +322,6 @@ def main(argv=None):
             rows = check_servers(address, args.http_port, args.market_port,
                                  args.proxy_port, diagnostic=args.diagnostic_apk.is_file(),
                                  additional_routes=tuple(route for route, path in (
-                                     ("/diplay-android42.apk", args.diplay_apk),
                                      ("/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk),
                                      ("/lan-cast-android42.apk", args.lan_cast_apk),
                                  ) if path is not None and path.is_file()))
@@ -354,9 +348,6 @@ def main(argv=None):
     try:
         configure_logging(args.log_dir)
         additional_apks = {
-            "/diplay-android42.apk": (
-                args.diplay_apk,
-                "DiPlay Android 4.2 基线构建（不含 MFi 身份）"),
             "/lan-cast-android42.apk": (
                 args.lan_cast_apk,
                 "下载车机局域网投屏 LAN Cast"),

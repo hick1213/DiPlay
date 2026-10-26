@@ -63,19 +63,16 @@ class HookBundleTest(unittest.TestCase):
             original = b"PK\x03\x04" + (b"diagnostic package bytes" * 100)
             tvbox = base / "tvbox.apk"
             diagnostic = base / "diagnostic.apk"
-            diplay = base / "diplay.apk"
             cast = base / "cast.apk"
             current = base / "diplay-v12.apk"
             tvbox.write_bytes(b"PK\x03\x04" + b"main package" * 100)
             diagnostic.write_bytes(original)
-            diplay.write_bytes(b"PK\x03\x04" + b"diplay" * 100)
             cast.write_bytes(b"PK\x03\x04" + b"cast" * 200)
             current.write_bytes(b"PK\x03\x04" + b"current" * 200)
             catalog = Catalog(tvbox, "TVBox", "127.0.0.1", 0, 0)
             bundle = HookServerBundle(catalog, "127.0.0.1", 0, 0, 0,
                                       ["127.0.0.1"], diagnostic_apk=diagnostic,
                                       additional_apks={
-                                          "/diplay-android42.apk": (diplay, "下载 DiPlay"),
                                           "/lan-cast-android42.apk": (cast, "下载 LAN Cast"),
                                           "/diplay-android42-toolbar-voice-v12.apk": (current, "下载 Back 自动隐藏 v12"),
                                       })
@@ -84,7 +81,6 @@ class HookBundleTest(unittest.TestCase):
                 self.assertEqual(1, check_servers("127.0.0.1", *bundle.ports,
                                                   diagnostic=True,
                                                   additional_routes=(
-                                                      "/diplay-android42.apk",
                                                       "/diplay-android42-toolbar-voice-v12.apk",
                                                       "/lan-cast-android42.apk")))
                 conn = http.client.HTTPConnection("127.0.0.1", bundle.http.server_port)
@@ -98,23 +94,23 @@ class HookBundleTest(unittest.TestCase):
                     self.assertIn("安装 Intent 处理者", page)
                     self.assertIn("SELinux/分区", page)
                     self.assertIn("href='/car-probe-settings.apk'", page)
-                    self.assertIn("href='/diplay-android42.apk'", page)
+                    self.assertIn("其他工具（仅供诊断与局域网投屏测试）", page)
+                    self.assertNotIn("href='/diplay-android42.apk'", page)
                     self.assertIn("href='/diplay-android42-toolbar-voice-v12.apk'", page)
-                    self.assertLess(page.index("href='/diplay-android42-toolbar-voice-v12.apk'"),
-                                    page.index("href='/diplay-android42.apk'"))
                     self.assertNotIn("diplay-android42-mfi-fix2.apk", page)
                     self.assertIn("href='/lan-cast-android42.apk'", page)
                     conn.request("GET", "/car-probe-settings.apk")
                     reply = conn.getresponse()
                     self.assertEqual(200, reply.status)
                     self.assertEqual(original, reply.read())
-                    for route, file in (("/diplay-android42.apk", diplay),
-                                        ("/diplay-android42-toolbar-voice-v12.apk", current),
+                    for route, file in (("/diplay-android42-toolbar-voice-v12.apk", current),
                                         ("/lan-cast-android42.apk", cast)):
                         conn.request("GET", route)
                         reply = conn.getresponse()
                         self.assertEqual(200, reply.status)
                         self.assertEqual(file.read_bytes(), reply.read())
+                    conn.request("HEAD", "/diplay-android42.apk")
+                    self.assertEqual(404, conn.getresponse().status)
                     conn.request("HEAD", "/diplay-android42-mfi-fix2.apk")
                     self.assertEqual(404, conn.getresponse().status)
                     conn.request("HEAD", "/diplay-android42-ui-audio-v3.apk")

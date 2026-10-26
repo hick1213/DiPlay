@@ -8,11 +8,11 @@
    启动后会自动在 Mac 浏览器打开“车机 Android 4.2 安装 Demo”页面。
    车机浏览器访问同一个地址：http://<Mac 当前局域网 IP>:18816/
    页面提供“下载车机诊断 v11（蓝车图标 / Root / 安装限制）”按钮。
-   页面还提供“DiPlay Android 4.2 Android 音频输出 v5”和“车机局域网投屏 LAN Cast”。
-   最新 DiPlay v5、无身份基线包及局域网投屏下载地址分别是：
+   页面还提供当前 DiPlay v12 和“车机局域网投屏 LAN Cast”。
+   当前 DiPlay 与局域网投屏下载地址分别是：
    http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
-   http://<Mac 当前局域网 IP>:18816/diplay-android42.apk
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
+   无身份 DiPlay 基线 APK 不再显示或开放下载，原始文件仅在 Mac 本地备份。
    DiPlay v12 使用 sogou.map 包名；按一次 Back 显示控制栏，闲置 3 秒自动隐藏；期间点按顶部重新计时，快速再次 Back 仍可退出。
    断开后需等待 Wi-Fi Direct 清理结束，再点击连接；避免新群组被旧连接清理线程移除。
    v9 修复双向音频；v10 优化触摸 MOVE 队列、视频时间戳与解码器缓冲；v11 可选 30/35/40/45/50/55/60 FPS 并恢复后台画面；v12 控制栏 3 秒空闲隐藏并记录 CarPlay 语音状态以排查高德按钮。

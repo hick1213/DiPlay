@@ -147,9 +147,10 @@ API 17 ARM 模拟器补充验证：v6 原地升级 v7 成功，主页面固定�
 独立于 7.5 GB 外置开发工具链的小体积随车包位于 Mac
 `/Users/hick/github/DiPlay/car-market-kit/`；其一键入口源文件在
 `tools/carprobe/mac-kit/`。运行 Hook 时使用本地 `APKs/` 和 `logs/`，
-新版 Demo 首页另外提供 DiPlay `sogou.map` 安装适配版与 LAN Cast 车机投屏的
-独立下载按钮，链接分别为 `/diplay-android42.apk` 与
+新版 Demo 首页另外提供 DiPlay `sogou.map` 当前测试版与 LAN Cast 车机投屏的
+独立下载按钮，链接分别为 `/diplay-android42-toolbar-voice-v12.apk` 与
 `/lan-cast-android42.apk`；页面不改变 APK 的原包名和签名。
+无身份基线 APK 不再作为网页下载提供，但本地保留构建与回退文件。
 即使卸下移动硬盘也可以启动网络服务。实际原厂商店流量是否走代理、
 是否要求真实车机专有权限，仍需现场验证。
 商店先请求 HTTP `http://www.xygala.com/host.php` 获取 `app_market`

@@ -8,18 +8,18 @@
    启动后会自动在 Mac 浏览器打开“车机 Android 4.2 安装 Demo”页面。
    车机浏览器访问同一个地址：http://<Mac 当前局域网 IP>:18816/
    页面提供“下载车机诊断 v11（蓝车图标 / Root / 安装限制）”按钮。
-   页面还提供“DiPlay Android 4.2 Android 音频输出 v5”和“车机局域网投屏 LAN Cast”。
-   DiPlay v5 已附带本人提供的本地测试身份文件，但尚未证明通过苹果 MFi 认证。
-   最新包、无身份基线包和局域网投屏下载地址分别是：
-   http://<Mac 当前局域网 IP>:18816/diplay-android42-audio-output-v5.apk
-   http://<Mac 当前局域网 IP>:18816/diplay-android42.apk
+   页面还提供当前 DiPlay v12 和“车机局域网投屏 LAN Cast”。
+   最新 DiPlay 与局域网投屏下载地址分别是：
+   http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
-   DiPlay v5 使用 sogou.map 包名，在 v4 基础上升级；连接成功并显示首帧后控制栏自动隐藏。
-   全屏时按一次 Back 显示控制栏（持续显示），再按 Back 退出；无顶部下滑手势。
+   无身份基线包不再在下载页展示，也不能通过 /diplay-android42.apk 获取；
+   本地 APK 保留用于构建与故障回退。
+   DiPlay v12 使用 sogou.map 包名；连接成功并显示首帧后控制栏自动隐藏。
+   全屏时按一次 Back 显示控制栏，3 秒无操作自动隐藏；无顶部下滑手势。
    点击顶部状态文字确认 CarPlay 主音频资源、iPhone 下行 RTP 和 Android AudioTrack 播放状态。
    PCM、AAC 及 Opus（Concentus 软件解码回退）均由 Android STREAM_MUSIC 输出。
    车机本地测试音用于排除 Android 输出故障；DiPlay 无法强迫尚未协商成功的 iPhone 下发声音。
-   MFi 身份认证和真实 CarPlay 连接仍须真车实测，不能据此声称已修复。
+   MFi 身份为本人测试材料，不代表苹果官方认证；车机兼容性需实测。
 
 2. 首次安装或升级诊断 APK
    APKs/car-probe-whitelist-title-navi-v11.apk
