@@ -4,7 +4,7 @@
 set -eu
 
 src_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-output_dir=${1:-/Volumes/untitled/DiPlay-car-probe}
+output_dir=${1:?"Legacy builder requires an explicit scratch output directory; current APKs are in car-market-kit/APKs"}
 sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 tools_dir="$sdk_dir/build-tools/34.0.0"
 android_jar="$sdk_dir/platforms/android-21/android.jar"

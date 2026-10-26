@@ -1,7 +1,10 @@
 车机应用市场 Hook / Android 4.2 Mac 随车包（2026-10-26）
 
 本地位置：/Users/hick/github/DiPlay/car-market-kit/
-所有 APK、启动命令和日志都在 Mac 内置磁盘。无需带移动硬盘。
+所有安装 APK 统一放在 /Users/hick/github/DiPlay/car-market-kit/APKs/，
+只保留 DiPlay v12 / LAN Cast v5 / 车机诊断 v11 / TVBox v5。
+本地私有认证文件保存在仓库 .private/mfi-test-20261026/offline-mfi/
+（不会被 Git 提交或作为独立下载开放）；无需带移动硬盘。
 仅共享已授权拥有的车机测试网络，不会自动更改车机系统。
 
 1. Mac 与车机连接同一个可信热点；双击 Start-Car-Market-Hook.command。
@@ -16,8 +19,8 @@
    http://<Mac 当前局域网 IP>:18816/car-probe-settings.apk
    TVBox 4.2 v5（固定下载地址）：
    http://<Mac 当前局域网 IP>:18816/tvbox-android42.apk
-   局域网投屏当前为 LAN Cast v5，修复 DLNA 标准服务 ID、SCPD 状态变量并刷新缓存；v1-v4 用于回退。
-   无身份 DiPlay 基线 APK 不再显示或开放下载，原始文件仅在 Mac 本地备份。
+   局域网投屏当前为 LAN Cast v5，修复 DLNA 标准服务 ID、SCPD 状态变量并刷新缓存。
+   历史 APK（包括无身份基线包）已经清理，安装页仅显示最新四个应用。
    DiPlay v12 使用 sogou.map 包名；按一次 Back 显示控制栏，闲置 3 秒自动隐藏；期间点按顶部重新计时，快速再次 Back 仍可退出。
    断开后需等待 Wi-Fi Direct 清理结束，再点击连接；避免新群组被旧连接清理线程移除。
    v9 修复双向音频；v10 优化触摸 MOVE 队列、视频时间戳与解码器缓冲；v11 可选 30/35/40/45/50/55/60 FPS 并恢复后台画面；v12 控制栏 3 秒空闲隐藏并记录 CarPlay 语音状态以排查高德按钮。

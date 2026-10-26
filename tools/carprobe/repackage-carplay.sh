@@ -6,7 +6,7 @@ set -eu
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 input_apk="$root_dir/legacy/build/outputs/apk/debug/legacy-debug.apk"
 manifest="$root_dir/tools/carprobe/AndroidManifestCarPlayWhitelist.xml"
-output_dir=${1:-/Volumes/untitled/DiPlay-car-probe}
+output_dir=${1:?"Legacy repack requires an explicit scratch output directory; current APKs are in car-market-kit/APKs"}
 output_apk="$output_dir/diplay-carplay-android42-sogou-v2.apk"
 android_sdk=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$android_sdk/build-tools/34.0.0"

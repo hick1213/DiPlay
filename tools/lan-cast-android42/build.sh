@@ -3,7 +3,7 @@
 set -eu
 
 source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-output_dir=${1:-/Volumes/untitled/Android42-apps}
+output_dir=${1:-"$source_dir/../../car-market-kit/APKs"}
 sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$sdk_dir/build-tools/35.0.0"
 android_jar="$sdk_dir/platforms/android-21/android.jar"
@@ -20,7 +20,11 @@ if [ ! -f "$keystore" ]; then
 fi
 
 mkdir -p "$output_dir"
-build_dir=$(mktemp -d "$output_dir/.lancast-build.XXXXXX")
+# Keep generated DEX, manifest and aligned test APKs out of the release APK
+# directory. Only the final newest installation APK should be retained there.
+umask 077
+build_dir=$(mktemp -d "${TMPDIR:-/private/tmp}/lancast-build.XXXXXX")
+trap 'rm -rf -- "$build_dir"' EXIT HUP INT TERM
 mkdir -p "$build_dir/classes" "$build_dir/dex"
 
 javac -source 7 -target 7 -cp "$android_jar" -d "$build_dir/classes" \

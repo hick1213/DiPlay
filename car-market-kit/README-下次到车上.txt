@@ -1,7 +1,13 @@
 车机应用市场 Hook / Android 4.2 Mac 随车包（2026-10-26）
 
 本地位置：/Users/hick/github/DiPlay/car-market-kit/
-所有 APK、启动命令和日志都在 Mac 内置磁盘。无需带移动硬盘。
+所有用于安装的最新版 APK 都统一在 Mac 的
+/Users/hick/github/DiPlay/car-market-kit/APKs/
+当前仅保留：DiPlay v12、LAN Cast v5、车机诊断 v11、TVBox v5。
+MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
+不放在 APK 下载目录，也不会加入 Git。无需带移动硬盘。
+如需本地重新构建 DiPlay，请在仓库根目录执行：
+  DIPLAY_AUTH_ASSETS_DIR="$PWD/.private/mfi-test-20261026" ./gradlew :legacy:assembleStandaloneDebug -PdiplayLegacyApplicationId=sogou.map
 仅共享已授权拥有的车机测试网络，不会自动更改车机系统。
 
 1. Mac 与车机连接同一个可信热点；双击 Start-Car-Market-Hook.command。
@@ -16,9 +22,9 @@
    http://<Mac 当前局域网 IP>:18816/car-probe-settings.apk
    TVBox 4.2 v5（2.5.0-native42，固定下载链接）：
    http://<Mac 当前局域网 IP>:18816/tvbox-android42.apk
-   LAN Cast 当前为 v5（服务 ID / SCPD 参数符合 UPnP、双斜杠兼容、SSDP 缓存刷新）；v1-v4 本地保留回退。
-   无身份基线包不再在下载页展示，也不能通过 /diplay-android42.apk 获取；
-   本地 APK 保留用于构建与故障回退。
+   LAN Cast 当前为 v5（服务 ID / SCPD 参数符合 UPnP、双斜杠兼容、SSDP 缓存刷新）。
+   历史 APK（包括无身份 DiPlay 基线）已从安装包目录清理；
+   构建时的临时 Gradle APK 不视为发布包。
    DiPlay v12 使用 sogou.map 包名；连接成功并显示首帧后控制栏自动隐藏。
    全屏时按一次 Back 显示控制栏，3 秒无操作自动隐藏；无顶部下滑手势。
    点击顶部状态文字确认 CarPlay 主音频资源、iPhone 下行 RTP 和 Android AudioTrack 播放状态。
@@ -50,6 +56,9 @@
    ZIP 的 install-evidence/installer-routes.txt 是组件/权限报告；
    install-evidence/system-files-manifest.txt 是系统文件复制/跳过清单。
    v10/v11 额外加入 install-evidence/root-feasibility.txt（Root 深度只读取证）。
+   上传文件统一保存在 car-market-kit/dumps/；2026-10-25 的三份
+   旧车机原厂上传（应用商店、系统安装器、ODEX）保存为仅本地可读的
+   oem-installer-uploads-20261025.zip，不属于安装包发布目录。
    普通权限看不到的内容会记录 SKIPPED，不会执行提权漏洞，
    不会抓取 /data/data 中其他 App 的私有资料。
    要传回 Mac：本机 Hook 保持运行，车机 Dump 页面填写启动页显示的 Mac

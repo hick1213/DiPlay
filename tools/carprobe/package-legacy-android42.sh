@@ -5,7 +5,7 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 original_apk="$project_dir/legacy/build/outputs/apk/debug/legacy-debug.apk"
-output_dir=${1:-/Volumes/untitled/DiPlay-car-probe}
+output_dir=${1:?"Historical repack requires an explicit scratch output directory; use the current Gradle build for v12"}
 output_apk="$output_dir/diplay-legacy-android42-sogou-map-formal-20261025.apk"
 android_sdk=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$android_sdk/build-tools/34.0.0"

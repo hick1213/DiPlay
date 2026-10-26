@@ -5,7 +5,7 @@ set -euo pipefail
 PROJECT_DIR="/Users/hick/github/DiPlay"
 KIT_DIR="$PROJECT_DIR/car-market-kit"
 APK="$KIT_DIR/APKs/tvbox-android42-full-native-v5.apk"
-MFI_APK="/Users/hick/Library/Application Support/DiPlay/mfi-test-20261026/diplay-legacy-android42-toolbar-voice-v12-20261026.apk"
+MFI_APK="$KIT_DIR/APKs/diplay-android42-toolbar-voice-v12.apk"
 
 if [[ ! -f "$PROJECT_DIR/scripts/car_market_hook.py" || ! -f "$APK" || ! -f "$MFI_APK" ]]; then
   echo "缺少 DiPlay 项目、市场 APK 或当前 v12 APK，请检查：$PROJECT_DIR 与 $KIT_DIR/APKs，以及 $MFI_APK"

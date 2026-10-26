@@ -73,8 +73,14 @@ LAN_CAST_TEST_HOST=192.168.1.110 LAN_CAST_TEST_CALLBACK_HOST=192.168.1.109 \
 构建：
 
 ```sh
-sh tools/lan-cast-android42/build.sh /Volumes/untitled/Android42-apps
+# 源码验证阶段：先编译到临时候选目录；通过回归后才升级统一 APK 目录
+mkdir -p /private/tmp/lancast-candidate
+sh tools/lan-cast-android42/build.sh /private/tmp/lancast-candidate
 ```
 
+正式最新版 APK 只在 `car-market-kit/APKs/lan-cast-android42-v5.apk`。
+默认构建输出位置也指向这个目录，但**不会覆盖**现有 APK；新版本需完成测试后再切换发布。
+旧版本 APK 均已从 Mac 和历史外部构建目录删除；原始 TVBox 上游构建输入
+单独归档至 `car-market-kit/dumps/tvbox-build-inputs-20261025.zip`，不作为安装包提供。
 检查安装前确保车机原有应用未使用该包名；遇到“替换现有应用”应取消。
 APK 构建/签名成功不代表已在 Android 4.2 真机成功播放，后者必须单独验证。

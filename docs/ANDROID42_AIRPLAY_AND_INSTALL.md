@@ -18,7 +18,7 @@
 1. 普通页面可「复制完整报告」或「分享报告」；**不会自动上传**。
 2. 主页面「安装限制 Dump」：勾选原厂商店、安装器、系统设置及桌面，按「① 导出 App + 安装限制证据 ZIP」，手动确认。
 3. Mac 与车机必须在本人可信局域网；Mac 上启动 `car-market-kit/Start-Car-Market-Hook.command`。Dump 页填 Mac 当前 Wi-Fi IP（`ipconfig getifaddr en0`），点击「② 将刚导出的 ZIP 发送到我的 Mac」并确认。
-4. 车机 POST 到 `http://<Mac-IP>:18816/api/diagnostic-dump`；Mac 验证 ZIP 和 SHA-256 后保存到 `car-market-kit/dumps/`。当前目录为空，尚没有车机上传的 Dump。该目录仅在本地，不自动公开。
+4. 车机 POST 到 `http://<Mac-IP>:18816/api/diagnostic-dump`；Mac 验证 ZIP 和 SHA-256 后保存到 `car-market-kit/dumps/`。2026-10-25 曾有一个 30,628,853 字节 Dump 的成功接收日志，但现在源 ZIP 未找到；不能据此声称此文件仍可读取。三份更早上传的越米商店 APK、原厂安装器 APK、ODEX 已打包保存在 `car-market-kit/dumps/oem-installer-uploads-20261025.zip`（原件、元信息和 SHA-256 均保留）。该目录仅在本地，不自动公开。
 5. 普通硬件报告还有**可选 HTTPS 配对**（服务器和 10 位配对码），成功后可手动上传报告/应用自身日志，或明确勾选「后台监测」每五分钟上报；默认关闭，仅日志本诊断应用，不等于完整系统 logcat。需要真实可达的 HTTPS 接收服务，局域网 Dump 接口不是这个 HTTPS 配对服务。
 
 ## 3. 任意 APK 安装限制：目前没有证据证明已解除

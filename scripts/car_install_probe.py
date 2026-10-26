@@ -20,43 +20,22 @@ from urllib.parse import parse_qs, urlsplit
 from car_probe_reports import MAX_UPLOAD_BYTES, ReportStore
 
 
-DEFAULT_APK = (
-    Path(__file__).resolve().parents[1]
-    / "legacy/build/outputs/apk/debug/legacy-debug.apk"
-)
-DEFAULT_PROBE_APK = Path(
-    "/Volumes/untitled/DiPlay-car-probe/car-probe-android42-debug-v2.apk"
-)
-DEFAULT_WHITELIST_APK = Path(
-    "/Volumes/untitled/DiPlay-car-probe/car-probe-whitelist-title-navi-v4.apk"
-)
-DEFAULT_STORE_CACHE_PROBE_APK = Path(
-    "/Volumes/untitled/DiPlay-car-probe/car-probe-whitelist-title-navi-v5.apk"
-)
-DEFAULT_CARPLAY_APK = Path(
-    "/Volumes/untitled/DiPlay-car-probe/diplay-legacy-android42-sogou-map-formal-20261025.apk"
-)
-DEFAULT_LAN_CAST_APK = Path(
-    "/Volumes/untitled/Android42-apps/lan-cast-android42-v1.apk"
-)
-DEFAULT_TVBOX42_APK = Path(
-    "/Volumes/untitled/Android42-apps/tvbox-android42-v1.apk"
-)
-DEFAULT_TVBOX_LOWRAM_APK = Path(
-    "/Volumes/untitled/Android42-apps/tvbox-android42-lowram-v2.apk"
-)
-DEFAULT_TVBOX_MODULAR_APK = Path(
-    "/Volumes/untitled/Android42-apps/tvbox-android42-modular-v3.apk"
-)
-DEFAULT_TVBOX_FULL_APK = Path(
-    "/Volumes/untitled/Android42-apps/tvbox-android42-full-native-v5.apk"
-)
-DEFAULT_TVBOX_LITE_APK = Path(
-    "/Volumes/untitled/Android42-apps/tvbox-android42-lite-v0.2.apk"
-)
-DEFAULT_X5_TBS_APK = Path(
-    "/Volumes/untitled/Android42-apps/source/x5.tbs.apk"
-)
+CURRENT_APKS = Path(__file__).resolve().parents[1] / "car-market-kit/APKs"
+DEFAULT_APK = CURRENT_APKS / "diplay-android42-toolbar-voice-v12.apk"
+DEFAULT_PROBE_APK = CURRENT_APKS / "car-probe-whitelist-title-navi-v11.apk"
+DEFAULT_WHITELIST_APK = DEFAULT_PROBE_APK
+DEFAULT_STORE_CACHE_PROBE_APK = DEFAULT_PROBE_APK
+DEFAULT_CARPLAY_APK = DEFAULT_APK
+DEFAULT_LAN_CAST_APK = CURRENT_APKS / "lan-cast-android42-v5.apk"
+DEFAULT_TVBOX42_APK = CURRENT_APKS / "tvbox-android42-full-native-v5.apk"
+# Legacy download variants deliberately point to absent files: old APKs were
+# retired. Never silently offer a different package under an outdated label.
+RETIRED_APK = CURRENT_APKS / "__historical-version-retired__.apk"
+DEFAULT_TVBOX_LOWRAM_APK = RETIRED_APK
+DEFAULT_TVBOX_MODULAR_APK = RETIRED_APK
+DEFAULT_TVBOX_FULL_APK = RETIRED_APK
+DEFAULT_TVBOX_LITE_APK = RETIRED_APK
+DEFAULT_X5_TBS_APK = RETIRED_APK
 SLOW_DOWNLOAD_SECONDS = 20
 
 
@@ -80,8 +59,9 @@ h1{font-size:24px}h2{font-size:19px}.section{background:white;padding:14px;margi
 a.button{display:block;background:#1462a5;color:#fff;text-align:center;padding:14px 5px;margin:12px 0;text-decoration:none;font-size:19px}
 .note{color:#a34b09}li{margin:8px 0}
 </style></head><body>
-<h1>Android 4.2 车机安装诊断</h1>
-<p>本页只提供测试下载，不会自动安装、卸载或修改车机。</p>
+<h1>Android 4.2 车机安装诊断（历史兼容入口）</h1>
+<p>正式最新版下载请使用 Mac 的 18816 端口，四个 APK 统一放在 car-market-kit/APKs。</p>
+<p>本页仅用于可选择的诊断上传测试，不会自动安装、卸载或修改车机。</p>
 <div class="section"><h2>第一步：通知栏 / 原生设置入口</h2>
 <p>下载一个不含程序的普通 ZIP。服务器会用约 20 秒发送它，方便观察下载通知。</p>
 <a class="button" href="/notification-test.zip">开始 20 秒测试下载</a>
@@ -89,32 +69,17 @@ a.button{display:block;background:#1462a5;color:#fff;text-align:center;padding:1
 <li>长按“正在下载”或“下载完成”的通知，尝试点“应用信息”。</li>
 <li>观察能否进一步进入系统“设置”或“安全”页面。</li></ol>
 <p class="note">若浏览器不产生通知，或无法长按，请记录现象；不要反复尝试。</p></div>
-<div class="section"><h2>第二步：确认安装拦截位置</h2>
-<p>原始包名的 DiPlay APK 仅供核对，不适用于当前车机的安装白名单。</p>
-<a class="button" href="/diplay.apk">原始 APK（未改安装包名）</a>
-<p><b>推荐：2026-10-23 已移植的 Android 4.2 正式工程</b>。
-此包由原始 legacy APK 重新封装，三个 DEX 均未改变；安装包名为 sogou.map，
-不会覆盖诊断 Demo title.navi。</p>
-<a class="button" href="/diplay-carplay.apk">下载 DiPlay Android 4.2 移植版（sogou.map）</a>
-<p class="note">新包与之前自行安装的 sogou.map CarPlay 测试包签名相同，可以尝试更新；
-如果系统提示替换任何原厂或不认识的应用，请取消。当前包不含 MFi 身份材料，
-先验证安装、启动及连接界面。</p>
-<p>点击下载后的文件，拍下首次出现的安装提示。<b>不要卸载任何原厂应用。</b></p>
-<p class="note">网页下载成功并不代表系统允许安装。若出现未知来源、系统限制或签名冲突，直接记录弹窗。</p></div>
-<div class="section"><h2>深度诊断 + 日志上传 APK</h2>
-<p>检测 CPU、内存、存储、视频编解码器、Wi-Fi Direct、ADB/root 线索以及安装器状态，可向个人服务器上传完整报告。</p>
-<a class="button" href="/car-probe.apk">下载普通车机诊断 APK</a>
-<p><b>升级：深度诊断 v4</b>：包名 title.navi；延续原 Demo，可升级安装并保留已配对凭据。
-配对后可以一键上传本应用日志，手动开启每 5 分钟后台监测，切换到 CarPlay 后仍继续。</p>
-<a class="button" href="/car-probe-whitelist.apk">下载深度诊断 v4（Android 4.2）</a>
-<p><b>新验证入口 v5</b>：检查原厂商店缓存是否允许写入，并可选择将未经改包名的第三方 APK 下载到该目录后交给原厂安装器确认。</p>
-<a class="button" href="/car-probe-cache.apk">下载原厂缓存安装验证 v5</a>
-<p class="note">后台监测默认关闭，开启后会显示持续通知；可在通知栏或应用界面关闭。普通应用不能抓取其他应用全部日志，也不会自动开启 root/ADB。</p>
-<p class="note">更新自己已安装的诊断 Demo 可以继续；若提示替换任何原厂应用，请取消。</p></div>
+<div class="section"><h2>当前安装版</h2>
+<a class="button" href="/diplay-carplay.apk">DiPlay v12（CarPlay；sogou.map）</a>
+<a class="button" href="/lan-cast.apk">LAN Cast v5（DLNA；com.uu.uunavi）</a>
+<a class="button" href="/car-probe-whitelist.apk">车机诊断 v11（title.navi）</a>
+<a class="button" href="/tvbox-android42.apk">TVBox v5（com.tencent.navsns）</a>
+<p class="note">DiPlay 含私有测试身份材料，仅用于授权的可信局域网。
+旧版已经清理；请勿替换不认识的原厂同名程序。</p></div>
 <div class="section"><h2>第三步：原厂应用市场</h2>
 <p>如果网页安装被拦截，请拍下原厂市场首页、应用详情或失败提示。
 后续再检查它是通过什么安装入口及网络请求下载 APK。</p></div>
-<p>诊断页版本 4 · 服务端保存报告，下载和安装均由用户操作</p></body></html>
+<p>兼容诊断页 · 服务端保存报告，下载和安装均由用户操作</p></body></html>
 """.encode("utf-8")
 
 
@@ -323,36 +288,6 @@ placeholder="6 位上传码" maxlength="6" required>
             return
         if route in ("/", "/index.html"):
             content = PAGE
-            available_apps = []
-            if self.lan_cast_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/lan-cast.apk">下载局域网投屏 Android 4.2 APK</a>'
-                )
-            if self.tvbox42_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/tvbox-android42.apk">下载 TVBox Android 4.2 APK</a>'
-                )
-            if self.tvbox_modular_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/tvbox-modular.apk">TVBox 完整功能 · 按需内核版</a>'
-                )
-            if self.tvbox_full_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/tvbox-full.apk">TVBox 原生 API17 验证版 v5</a>'
-                )
-            if self.tvbox_lowram_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/tvbox-lowram.apk">TVBox 完整功能 · 低内存版</a>'
-                )
-            if self.tvbox_lite_apk_path.is_file():
-                available_apps.append(
-                    '<a class="button" href="/tvbox-lite.apk">TVBox 原生轻量版（插件适配中）</a>'
-                )
-            if available_apps:
-                section = ('<div class="section"><h2>更多 Android 4.2 独立应用</h2>'
-                           '<p>仅提供经打包验证的独立 APK；请核对车机安装提示。</p>'
-                           + "".join(available_apps) + '</div>').encode("utf-8")
-                content = content.replace(b"</body></html>", section + b"</body></html>")
             store = getattr(self.server, "report_store", None)
             if store is not None and not store.upload_used:
                 section = ("<div class=\"section\"><h2>上传车机文件</h2>"

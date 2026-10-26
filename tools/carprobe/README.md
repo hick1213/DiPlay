@@ -1,5 +1,14 @@
 # Android 4.2 车机只读诊断 APK
 
+**当前发布位置（2026-10-26）：** 所有最新可安装 APK 统一在
+`/Users/hick/github/DiPlay/car-market-kit/APKs/`，只保留 DiPlay v12、
+LAN Cast v5、车机深度诊断 v11、TVBox v5。之前移动硬盘上的
+`/Volumes/untitled/DiPlay-car-probe/` 是已经清理的旧实验目录，
+下文引用此目录的早期版本命令仅为历史技术记录，**不要作为当前构建/安装入口**。
+当前原厂商店、安装器与 ODEX 的独有上传取证资料（不作为待安装应用）
+保存在本地 `car-market-kit/dumps/oem-installer-uploads-20261025.zip`。
+当前启动请使用 `car-market-kit/Start-Car-Market-Hook.command`。
+
 这个独立 APK 不依赖 DiPlay/AndroidX，不含 native library，最低系统 API 17。它用于**安装通道打通后**了解车机，不能自动绕过厂商应用安装限制。v10 的常规诊断、Root 深度取证和安装限制取证仍只读；Root 授权测试和 Wi-Fi ADB 开关需要分别主动点击并确认，不自动运行提权漏洞。关键 App Dump 也需要手动确认。
 
 ## 功能与权限
