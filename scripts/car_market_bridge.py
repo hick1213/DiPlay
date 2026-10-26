@@ -202,64 +202,81 @@ class MarketHTTP(BaseHTTPRequestHandler):
                 self.wfile.write(content)
             return
         if route in ("/", "/index.html"):
-            latest_route = "/diplay-android42-toolbar-voice-v12.apk"
             offered = getattr(self.server, "additional_apks", {})
-            latest = offered.get(latest_route)
-            latest_link = (
-                "<hr><h3>当前测试版：DiPlay Android 4.2 v12（Back 控制栏 3 秒自动隐藏 + 高德语音诊断）</h3>"
-                "<a class='install' href='{}'>{}</a>"
-                "<p>连接成功并显示画面后自动隐藏顶部操作栏；按一次 Back 显示操作栏，再按一次 Back 退出。"
-                "点击顶部状态文字可验证 Android 输出，查看 iPhone 音频协商、主音频资源、实际音频包和 Android 播放结果。"
-                "断开后等待旧连接释放完成再重连，避免 Wi-Fi Direct 群组被清理线程误关。"
-                "H.264 解码器等待首帧缓冲区，若持续无画面会向 iPhone 请求新关键帧。"
-                "保留 v9 的音频与 v10 的低延迟触摸；顶部新增 FPS 选择（30 至 60 FPS，每档 5 FPS），"
-                "保存后在下一次连接生效。后台返回前台后重绑 Surface 并主动请求 H.264 关键帧，避免黑屏。"
-                "Back 显示操作栏后 3 秒不触碰自动隐藏；操作或弹窗期间不隐藏，关闭弹窗后重新计时。"
-                "新增 CarPlay 语音 appStates/speechMode 状态日志，便于排查高德语音按钮。"
-                "安装时确认包名 sogou.map；如提示替换不认识的原厂应用，请取消。</p>"
-            ).format(escape(latest_route, quote=True), escape(latest[1])) if latest else ""
-            extra_links = "".join(
-                "<a class='install' href='{}'>{}</a>".format(
-                    escape(extra_route, quote=True), escape(label))
-                for extra_route, (_, label) in sorted(
-                    offered.items()) if extra_route != latest_route
-            )
-            page = ("<!doctype html><html lang='zh-CN'><head>"
-                    "<meta charset='utf-8'><meta name='viewport' "
-                    "content='width=device-width,initial-scale=1'>"
-                    "<title>车机 Android 4.2 安装 Demo</title>"
-                    "<style>body{{font-family:sans-serif;max-width:640px;margin:18px;"
-                    "line-height:1.7}}a.install{{display:block;background:#1462a5;"
-                    "color:white;padding:14px;text-align:center;margin:18px 0;"
-                    "text-decoration:none;font-size:20px}}</style></head><body>"
-                    "<h2>车机 Android 4.2 安装 Demo</h2>"
-                    "<p>第一步：下载诊断 v11；安装或升级后，打开‘读取车辆信息’"
-                    "页面顶部的系统设置 / Wi-Fi 按钮，配置代理。</p>"
-                    "<a class='install' href='/car-probe-settings.apk'>"
-                    "下载车机诊断 v11（蓝车图标 / Root / 安装限制）</a>"
-                    "<p>v11 新增蓝车图标和手动创建桌面快捷方式按钮；"
-                    "保留系统设置和 Wi-Fi 快捷入口，可手动测试 Root 授权，"
-                    "仅在确认后尝试开启或关闭 Wi-Fi ADB。普通权限无法保证启用 ADB，"
-                    "也无法直接突破原厂安装白名单。</p>"
-                    "<p>新增‘安装限制 Dump’：手动勾选原厂商店、安装器、"
-                    "系统设置和桌面，生成 ZIP，并记录安装 Intent 处理者、"
-                    "权限、安装来源、Root/SELinux/分区线索及可读取的系统框架；"
-                    "填写本页地址中的 Mac IP 后，"
-                    "可再次确认并上传到 Mac 的 car-market-kit/dumps。"
-                    "仅在自己的可信局域网使用，不要求验证码。</p>"
-                    "<p>不要替换不认识的原厂同名应用。下载不等于安装成功，"
-                    "安装仍由车机系统确认。</p>"
-                    "{}"
-                    "<hr><p>其他工具（仅供诊断与局域网投屏测试）：</p>"
-                    "<a class='install' href='{}'>{}</a>{}"
-                    "<p>上方 DiPlay v12 为当前测试版，其包含本地测试身份材料，"
-                    "仅供本人在可信局域网内使用；不代表获得官方 MFi 认证。"
-                    "若提示替换不认识的原厂应用，请取消。</p>"
-                    "<p>第三步：在原厂应用市场内观察列表、下载与安装结果。"
-                    "本页仅供你自己的局域网测试。</p></body></html>".format(
-                        latest_link,
-                        escape(catalog.apk_path, quote=True),
-                        escape("下载 " + catalog.name + " 测试 APK"), extra_links)).encode("utf-8")
+            apps = []
+
+            def card(category, title, version, package, details, url):
+                return (
+                    "<article class='app'><p class='category'>{}</p><h3>{}</h3>"
+                    "<p class='version'>{} · <code>{}</code></p><p class='description'>{}</p>"
+                    "<a class='install' href='{}'>下载 APK</a></article>"
+                ).format(*(escape(value, quote=True) for value in
+                           (category, title, version, package, details, url)))
+
+            if "/diplay-android42-toolbar-voice-v12.apk" in offered:
+                apps.append(card(
+                    "无线 CarPlay", "DiPlay", "v12", "sogou.map",
+                    "画面/触控/Android 声音输出；FPS 30～60 可选；Back 显示控制栏后闲置 3 秒隐藏；"
+                    "恢复前后台画面，包含语音诊断。",
+                    "/diplay-android42-toolbar-voice-v12.apk"))
+
+            if "/lan-cast-android42.apk" in offered:
+                apps.append(card(
+                    "局域网投屏 · DLNA", "LAN Cast", "v5", "com.uu.uunavi",
+                    "支持兼容的 Bilibili、腾讯视频 DLNA 投屏；已修复服务声明和状态通知。"
+                    "不包含 AirPlay 镜像或 DRM 解码。",
+                    "/lan-cast-android42.apk"))
+
+            if getattr(self.server, "diagnostic_apk", None) is not None:
+                apps.append(card(
+                    "车机维护", "车机深度诊断", "v11", "title.navi",
+                    "蓝车图标；系统设置/Wi-Fi 入口、Root/ADB 只读检查、安装限制 Dump，"
+                    "可经确认将 ZIP 发送至同局域网的 Mac。",
+                    "/car-probe-settings.apk"))
+
+            tvbox_version = (
+                "v5 · 2.5.0-native42"
+                if catalog.apk.name == "tvbox-android42-full-native-v5.apk"
+                else "当前市场测试版")
+            apps.append(card(
+                "影音播放", catalog.name, tvbox_version, "com.tencent.navsns"
+                if tvbox_version.startswith("v5") else "请检查 APK 包名",
+                "Android 4.2 适配版影视播放器。支持的片源、功能取决于电视源与设备解码器。",
+                "/tvbox-android42.apk"))
+            page = (
+                "<!doctype html><html lang='zh-CN'><head>"
+                "<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>车机 Android 4.2 · 最新 APK 下载</title>"
+                "<style>"
+                "body{{font-family:-apple-system,BlinkMacSystemFont,'Noto Sans SC',sans-serif;"
+                "background:#f6f8fb;color:#18212e;max-width:680px;margin:0 auto;padding:22px 16px;"
+                "line-height:1.55}}h1{{font-size:25px;margin:0 0 7px}}"
+                "h2{{font-size:19px;margin:24px 0 8px}}h3{{font-size:20px;margin:0}}"
+                ".intro,.note{{color:#536171;font-size:14px}}.apps{{display:grid;gap:14px}}"
+                ".app{{background:white;border:1px solid #d9e0e8;border-radius:12px;padding:17px}}"
+                ".category{{font-size:13px;font-weight:600;color:#375f8d;margin:0 0 6px}}"
+                ".version{{margin:4px 0 7px;font-size:13px;color:#687488}}"
+                ".description{{font-size:14px;margin:7px 0 14px}}"
+                ".install{{display:block;text-align:center;background:#175d9c;color:#fff;"
+                "border-radius:8px;padding:12px;text-decoration:none;font-size:16px;font-weight:600}}"
+                "code{{font-size:12px}}.info{{margin-top:22px;border-top:1px solid #d9e0e8}}"
+                "</style></head><body>"
+                "<h1>车机 Android 4.2 · 最新安装包</h1>"
+                "<p class='intro'>当前可下载 {} 个应用。仅在自己的可信局域网使用；"
+                "点击下载后，仍需由设备系统安装器确认。</p>"
+                "<main><section class='apps'>{}</section></main>"
+                "<section class='info'><h2>安装及诊断说明</h2>"
+                "<p class='note'>① Mac 与车机处于同一局域网；② 下载对应 APK，核对包名、"
+                "版本及签名后按系统提示安装；③ 如果原车提示替换不认识的应用，请取消。</p>"
+                "<p class='note'>诊断 v11 可在“安装限制 Dump”中手动导出 ZIP，"
+                "填写 Mac 当前 IP 后确认上传到 car-market-kit/dumps。"
+                "Root / Wi-Fi ADB 需要设备已有授权，不能默认安装任意 APK。</p>"
+                "<p class='note'>DiPlay 使用私有测试身份材料，仅供当前授权测试。"
+                "不代表获得苹果官方 MFi 认证。LAN Cast v5 是 DLNA 接收器，不包含 AirPlay。</p>"
+                "<p class='note'>若安装失败，可把提示和诊断报告带回排查；"
+                "旧版和无身份 DiPlay 基线不在本页展示。</p>"
+                "</section></body></html>"
+            ).format(len(apps), "".join(apps)).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(page)))
@@ -269,7 +286,7 @@ class MarketHTTP(BaseHTTPRequestHandler):
             if send_body:
                 self.wfile.write(page)
             return
-        if route == catalog.apk_path:
+        if route in (catalog.apk_path, "/tvbox-android42.apk"):
             apk_file = catalog.apk
             size = catalog.size
         elif route == "/car-probe-settings.apk" and getattr(self.server, "diagnostic_apk", None):

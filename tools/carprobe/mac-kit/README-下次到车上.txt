@@ -5,13 +5,17 @@
 仅共享已授权拥有的车机测试网络，不会自动更改车机系统。
 
 1. Mac 与车机连接同一个可信热点；双击 Start-Car-Market-Hook.command。
-   启动后会自动在 Mac 浏览器打开“车机 Android 4.2 安装 Demo”页面。
+   启动后会自动在 Mac 浏览器打开“车机 Android 4.2 · 最新安装包”页面。
    车机浏览器访问同一个地址：http://<Mac 当前局域网 IP>:18816/
-   页面提供“下载车机诊断 v11（蓝车图标 / Root / 安装限制）”按钮。
-   页面还提供当前 DiPlay v12 和“车机局域网投屏 LAN Cast”。
-   当前 DiPlay 与局域网投屏下载地址分别是：
+   页面统一展示当前 4 个 APK（旧的无身份 DiPlay 基线不开放下载）：
+   DiPlay v12：
    http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
+   LAN Cast v5：
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
+   车机深度诊断 v11：
+   http://<Mac 当前局域网 IP>:18816/car-probe-settings.apk
+   TVBox 4.2 v5（固定下载地址）：
+   http://<Mac 当前局域网 IP>:18816/tvbox-android42.apk
    局域网投屏当前为 LAN Cast v5，修复 DLNA 标准服务 ID、SCPD 状态变量并刷新缓存；v1-v4 用于回退。
    无身份 DiPlay 基线 APK 不再显示或开放下载，原始文件仅在 Mac 本地备份。
    DiPlay v12 使用 sogou.map 包名；按一次 Back 显示控制栏，闲置 3 秒自动隐藏；期间点按顶部重新计时，快速再次 Back 仍可退出。

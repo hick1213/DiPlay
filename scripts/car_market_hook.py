@@ -233,6 +233,8 @@ def display_setup(address, http_port, tcp_port, proxy_port, network=None, mfi_te
     print("  必须由路由器向车机下发该 DNS；只改 Mac hosts 文件不生效。")
     print("\n  APK 下载：http://{}:{}/apk/<本次启动生成的随机名称>.apk".format(
           address, http_port))
+    print("  TVBox 当前市场包（固定链接）：http://{}:{}/tvbox-android42.apk".format(
+          address, http_port))
     print("  诊断 v11：http://{}:{}/car-probe-settings.apk".format(address, http_port))
     print("  Root / 安装限制 Dump 上传：在 v11 填 Mac IP {}，无需验证码，手动点击确认。".format(address))
     print("  ZIP 保存到 car-market-kit/dumps；只在可信隔离 Wi-Fi 中运行接收服务。")
@@ -321,7 +323,7 @@ def main(argv=None):
         try:
             rows = check_servers(address, args.http_port, args.market_port,
                                  args.proxy_port, diagnostic=args.diagnostic_apk.is_file(),
-                                 additional_routes=tuple(route for route, path in (
+                                 additional_routes=("/tvbox-android42.apk",) + tuple(route for route, path in (
                                      ("/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk),
                                      ("/lan-cast-android42.apk", args.lan_cast_apk),
                                  ) if path is not None and path.is_file()))
@@ -378,7 +380,7 @@ def main(argv=None):
         if subnets:
             LOG.warning("代理开放至信任网段 %s", ", ".join(map(str, subnets)))
         rows = check_servers(address, *bundle.ports, diagnostic=True,
-                             additional_routes=tuple(additional_apks))
+                             additional_routes=("/tvbox-android42.apk",) + tuple(additional_apks))
         if args.mfi_test_apk is not None:
             check_exact_apk(address, bundle.ports[0],
                             "/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk)

@@ -25,8 +25,23 @@ class HookBundleTest(unittest.TestCase):
                                       ["127.0.0.1"])
             try:
                 bundle.start()
-                self.assertEqual(1, check_servers("127.0.0.1", *bundle.ports))
+                self.assertEqual(1, check_servers(
+                    "127.0.0.1", *bundle.ports, additional_routes=("/tvbox-android42.apk",)))
                 self.assertEqual(original, apk.read_bytes())
+                conn = http.client.HTTPConnection("127.0.0.1", bundle.ports[0], timeout=3)
+                try:
+                    conn.request("GET", "/tvbox-android42.apk")
+                    reply = conn.getresponse()
+                    self.assertEqual(200, reply.status)
+                    self.assertEqual(original, reply.read())
+                    conn.request("GET", "/")
+                    reply = conn.getresponse()
+                    page = reply.read().decode("utf-8")
+                    self.assertIn("当前可下载 1 个应用", page)
+                    self.assertNotIn("href='/diplay-android42-toolbar-voice-v12.apk'", page)
+                    self.assertNotIn("href='/lan-cast-android42.apk'", page)
+                finally:
+                    conn.close()
             finally:
                 bundle.close()
 
@@ -81,6 +96,7 @@ class HookBundleTest(unittest.TestCase):
                 self.assertEqual(1, check_servers("127.0.0.1", *bundle.ports,
                                                   diagnostic=True,
                                                   additional_routes=(
+                                                      "/tvbox-android42.apk",
                                                       "/diplay-android42-toolbar-voice-v12.apk",
                                                       "/lan-cast-android42.apk")))
                 conn = http.client.HTTPConnection("127.0.0.1", bundle.http.server_port)
@@ -89,22 +105,35 @@ class HookBundleTest(unittest.TestCase):
                     reply = conn.getresponse()
                     self.assertEqual(200, reply.status)
                     page = reply.read().decode("utf-8")
-                    self.assertIn("车机 Android 4.2 安装 Demo", page)
-                    self.assertIn("诊断 v11（蓝车图标 / Root / 安装限制）", page)
-                    self.assertIn("安装 Intent 处理者", page)
-                    self.assertIn("SELinux/分区", page)
+                    self.assertIn("车机 Android 4.2 · 最新安装包", page)
+                    self.assertIn("当前可下载 4 个应用", page)
+                    self.assertIn("DiPlay", page)
+                    self.assertIn("LAN Cast", page)
+                    self.assertIn("车机深度诊断", page)
+                    self.assertIn("TVBox", page)
+                    self.assertIn("sogou.map", page)
+                    self.assertIn("com.uu.uunavi", page)
+                    self.assertIn("title.navi", page)
+                    self.assertIn("car-market-kit/dumps", page)
                     self.assertIn("href='/car-probe-settings.apk'", page)
-                    self.assertIn("其他工具（仅供诊断与局域网投屏测试）", page)
                     self.assertNotIn("href='/diplay-android42.apk'", page)
                     self.assertIn("href='/diplay-android42-toolbar-voice-v12.apk'", page)
                     self.assertNotIn("diplay-android42-mfi-fix2.apk", page)
                     self.assertIn("href='/lan-cast-android42.apk'", page)
+                    self.assertIn("href='/tvbox-android42.apk'", page)
+                    self.assertLess(page.index("href='/diplay-android42-toolbar-voice-v12.apk'"),
+                                    page.index("href='/lan-cast-android42.apk'"))
+                    self.assertLess(page.index("href='/lan-cast-android42.apk'"),
+                                    page.index("href='/car-probe-settings.apk'"))
+                    self.assertLess(page.index("href='/car-probe-settings.apk'"),
+                                    page.index("href='/tvbox-android42.apk'"))
                     conn.request("GET", "/car-probe-settings.apk")
                     reply = conn.getresponse()
                     self.assertEqual(200, reply.status)
                     self.assertEqual(original, reply.read())
                     for route, file in (("/diplay-android42-toolbar-voice-v12.apk", current),
-                                        ("/lan-cast-android42.apk", cast)):
+                                        ("/lan-cast-android42.apk", cast),
+                                        ("/tvbox-android42.apk", tvbox)):
                         conn.request("GET", route)
                         reply = conn.getresponse()
                         self.assertEqual(200, reply.status)
