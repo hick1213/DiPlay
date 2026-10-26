@@ -128,7 +128,7 @@ class HookServerBundle:
             self.http.diagnostic_apk = diagnostic_apk
             self.http.additional_apks = {}
             for route, (apk, label) in (additional_apks or {}).items():
-                if route not in ("/diplay-android42-toolbar-voice-v12.apk",
+                if route not in ("/diplay-android42-toolbar-voice-v13.apk",
                                  "/lan-cast-android42.apk"):
                     raise ValueError("不支持的额外下载路径：{}".format(route))
                 validated = Path(apk).resolve(strict=True)
@@ -288,7 +288,7 @@ def display_setup(address, http_port, tcp_port, proxy_port, network=None, mfi_te
     print("  自动诊断发现（UDP）：{}；车机自动识别当前 Mac IP，无需填写固定地址。".format(
         DEFAULT_DISCOVERY_PORT))
     if mfi_test:
-        print("  DiPlay Android Back 自动隐藏 + 语音诊断 v12：http://{}:{}/diplay-android42-toolbar-voice-v12.apk".format(address, http_port))
+        print("  DiPlay Android 4.2 v13（连接闪退日志 / 自动上传）：http://{}:{}/diplay-android42-toolbar-voice-v13.apk".format(address, http_port))
     print("  局域网投屏：http://{}:{}/lan-cast-android42.apk".format(address, http_port))
     if network:
         print("  HTTP 代理允许的测试网段：{}（只在可信网络启用）".format(network))
@@ -377,13 +377,13 @@ def main(argv=None):
             rows = check_servers(address, args.http_port, args.market_port,
                                  args.proxy_port, diagnostic=args.diagnostic_apk.is_file(),
                                  additional_routes=("/tvbox-android42.apk",) + tuple(route for route, path in (
-                                     ("/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk),
+                                     ("/diplay-android42-toolbar-voice-v13.apk", args.mfi_test_apk),
                                      ("/lan-cast-android42.apk", args.lan_cast_apk),
                                  ) if path is not None and path.is_file()))
             check_discovery(address, args.discovery_port)
             if args.mfi_test_apk is not None:
                 check_exact_apk(address, args.http_port,
-                                "/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk)
+                                "/diplay-android42-toolbar-voice-v13.apk", args.mfi_test_apk)
         except (OSError, ValueError, KeyError, AssertionError) as exc:
             print("FAIL: 市场 Hook 服务未就绪：{}".format(exc))
             return 1
@@ -409,8 +409,8 @@ def main(argv=None):
                 "下载车机局域网投屏 LAN Cast v6（黑屏诊断 + 手动/自动上传日志）"),
         }
         if args.mfi_test_apk is not None:
-            mfi_label = "下载 DiPlay Android 4.2 v12（顶部操作栏 3 秒自动隐藏，语音诊断）"
-            additional_apks["/diplay-android42-toolbar-voice-v12.apk"] = (
+            mfi_label = "下载 DiPlay Android 4.2 v13（连接故障日志、自动上传；保留 v12 功能）"
+            additional_apks["/diplay-android42-toolbar-voice-v13.apk"] = (
                 args.mfi_test_apk,
                 mfi_label)
         bundle = HookServerBundle(catalog, bind, args.http_port, args.market_port,
@@ -443,7 +443,7 @@ def main(argv=None):
         check_discovery(address, bundle.discovery.server_address[1])
         if args.mfi_test_apk is not None:
             check_exact_apk(address, bundle.ports[0],
-                            "/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk)
+                            "/diplay-android42-toolbar-voice-v13.apk", args.mfi_test_apk)
         LOG.info("SMOKE PASS app_rows=%s", rows)
         display_setup(address, *bundle.ports,
                       ", ".join(map(str, subnets)) if subnets else None,

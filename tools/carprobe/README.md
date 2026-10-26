@@ -1,7 +1,7 @@
 # Android 4.2 车机只读诊断 APK
 
 **当前发布位置（2026-10-26）：** 所有最新可安装 APK 统一在
-`/Users/hick/github/DiPlay/car-market-kit/APKs/`，只保留 DiPlay v12、
+`/Users/hick/github/DiPlay/car-market-kit/APKs/`，只保留 DiPlay v13、
 LAN Cast v5、车机深度诊断 v11、TVBox v5。之前移动硬盘上的
 `/Volumes/untitled/DiPlay-car-probe/` 是已经清理的旧实验目录，
 下文引用此目录的早期版本命令仅为历史技术记录，**不要作为当前构建/安装入口**。
@@ -156,7 +156,7 @@ API 17 ARM 模拟器补充验证：v6 原地升级 v7 成功，主页面固定�
 独立于 7.5 GB 外置开发工具链的小体积随车包位于 Mac
 `/Users/hick/github/DiPlay/car-market-kit/`；其一键入口源文件在
 `tools/carprobe/mac-kit/`。运行 Hook 时使用本地 `APKs/` 和 `logs/`，
-新版 Demo 首页汇总 DiPlay v12 (`/diplay-android42-toolbar-voice-v12.apk`）、
+新版 Demo 首页汇总 DiPlay v13 (`/diplay-android42-toolbar-voice-v13.apk`）、
 LAN Cast v5 (`/lan-cast-android42.apk`）、车机深度诊断 v11
 (`/car-probe-settings.apk`）以及 TVBox 4.2 v5
 (`/tvbox-android42.apk`）四个固定下载入口；页面不改变 APK 的原包名和签名。

@@ -41,7 +41,7 @@ class HookBundleTest(unittest.TestCase):
                     reply = conn.getresponse()
                     page = reply.read().decode("utf-8")
                     self.assertIn("当前可下载 1 个应用", page)
-                    self.assertNotIn("href='/diplay-android42-toolbar-voice-v12.apk'", page)
+                    self.assertNotIn("href='/diplay-android42-toolbar-voice-v13.apk'", page)
                     self.assertNotIn("href='/lan-cast-android42.apk'", page)
                 finally:
                     conn.close()
@@ -164,7 +164,7 @@ class HookBundleTest(unittest.TestCase):
                                       ["127.0.0.1"], diagnostic_apk=diagnostic,
                                       additional_apks={
                                           "/lan-cast-android42.apk": (cast, "下载 LAN Cast"),
-                                          "/diplay-android42-toolbar-voice-v12.apk": (current, "下载 Back 自动隐藏 v12"),
+                                          "/diplay-android42-toolbar-voice-v13.apk": (current, "下载 DiPlay 连接诊断 v13"),
                                       })
             try:
                 bundle.start()
@@ -172,7 +172,7 @@ class HookBundleTest(unittest.TestCase):
                                                   diagnostic=True,
                                                   additional_routes=(
                                                       "/tvbox-android42.apk",
-                                                      "/diplay-android42-toolbar-voice-v12.apk",
+                                                      "/diplay-android42-toolbar-voice-v13.apk",
                                                       "/lan-cast-android42.apk")))
                 conn = http.client.HTTPConnection("127.0.0.1", bundle.http.server_port)
                 try:
@@ -192,11 +192,11 @@ class HookBundleTest(unittest.TestCase):
                     self.assertIn("car-market-kit/dumps", page)
                     self.assertIn("href='/car-probe-settings.apk'", page)
                     self.assertNotIn("href='/diplay-android42.apk'", page)
-                    self.assertIn("href='/diplay-android42-toolbar-voice-v12.apk'", page)
+                    self.assertIn("href='/diplay-android42-toolbar-voice-v13.apk'", page)
                     self.assertNotIn("diplay-android42-mfi-fix2.apk", page)
                     self.assertIn("href='/lan-cast-android42.apk'", page)
                     self.assertIn("href='/tvbox-android42.apk'", page)
-                    self.assertLess(page.index("href='/diplay-android42-toolbar-voice-v12.apk'"),
+                    self.assertLess(page.index("href='/diplay-android42-toolbar-voice-v13.apk'"),
                                     page.index("href='/lan-cast-android42.apk'"))
                     self.assertLess(page.index("href='/lan-cast-android42.apk'"),
                                     page.index("href='/car-probe-settings.apk'"))
@@ -206,7 +206,7 @@ class HookBundleTest(unittest.TestCase):
                     reply = conn.getresponse()
                     self.assertEqual(200, reply.status)
                     self.assertEqual(original, reply.read())
-                    for route, file in (("/diplay-android42-toolbar-voice-v12.apk", current),
+                    for route, file in (("/diplay-android42-toolbar-voice-v13.apk", current),
                                         ("/lan-cast-android42.apk", cast),
                                         ("/tvbox-android42.apk", tvbox)):
                         conn.request("GET", route)

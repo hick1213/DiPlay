@@ -3,7 +3,7 @@
 本地位置：/Users/hick/github/DiPlay/car-market-kit/
 所有用于安装的最新版 APK 都统一在 Mac 的
 /Users/hick/github/DiPlay/car-market-kit/APKs/
-当前仅保留：DiPlay v12、LAN Cast v6、车机诊断 v11、TVBox v5。
+当前仅保留：DiPlay v13、LAN Cast v6、车机诊断 v11、TVBox v5。
 MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
 不放在 APK 下载目录，也不会加入 Git。无需带移动硬盘。
 如需本地重新构建 DiPlay，请在仓库根目录执行：
@@ -14,8 +14,8 @@ MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
    启动后会自动在 Mac 浏览器打开“车机 Android 4.2 · 最新安装包”页面。
    车机浏览器访问同一个地址：http://<Mac 当前局域网 IP>:18816/
    页面统一展示 4 个最新版 APK，下载链接固定，按当前版本区分：
-   DiPlay v12（无线 CarPlay、Android 声音、可选 FPS）：
-   http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
+   DiPlay v13（保留无线 CarPlay 功能；新增点击「连接」后的自动诊断）：
+   http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v13.apk
    LAN Cast v6（DLNA、主动上传日志、报告黑屏和自动故障上报）：
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
    车机深度诊断 v11（蓝车图标 / Root / 安装限制 Dump）：
@@ -28,7 +28,14 @@ MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
    再通过 HTTP 18816 提交脱敏日志 ZIP；可以在故障日志界面关闭自动上报。
    历史 APK（包括无身份 DiPlay 基线）已从安装包目录清理；
    构建时的临时 Gradle APK 不视为发布包。
-   DiPlay v12 使用 sogou.map 包名；连接成功并显示首帧后控制栏自动隐藏。
+   DiPlay v13 使用 sogou.map 包名；连接成功并显示首帧后控制栏自动隐藏。
+   新增单独的「DiPlay 故障日志」桌面入口，以及连接前后阶段持久化日志。
+   若点击连接后闪退，系统可尝试自动通过 UDP 18817 寻找 Mac，
+   将日志上传到 HTTP 18816 /api/diagnostic-dump。
+   若自动失败，可重新打开「DiPlay 故障日志」，点「立即上传当前日志」手动发送。
+   Android 4.2.2 ARM32 模拟器已确认 v13 能启动、按钮触发时记录 CONNECT_CHECK、
+   本地日志可实际上传 Mac HTTP 200。由于模拟器没有配对的 iPhone，
+   **不代表已修复真车机「连接后闪退」**，请以真实车机的日志为准。
    全屏时按一次 Back 显示控制栏，3 秒无操作自动隐藏；无顶部下滑手势。
    点击顶部状态文字确认 CarPlay 主音频资源、iPhone 下行 RTP 和 Android AudioTrack 播放状态。
    PCM、AAC 及 Opus（Concentus 软件解码回退）均由 Android STREAM_MUSIC 输出。

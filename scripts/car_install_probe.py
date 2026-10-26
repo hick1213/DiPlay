@@ -21,7 +21,7 @@ from car_probe_reports import MAX_UPLOAD_BYTES, ReportStore
 
 
 CURRENT_APKS = Path(__file__).resolve().parents[1] / "car-market-kit/APKs"
-DEFAULT_APK = CURRENT_APKS / "diplay-android42-toolbar-voice-v12.apk"
+DEFAULT_APK = CURRENT_APKS / "diplay-android42-toolbar-voice-v13.apk"
 DEFAULT_PROBE_APK = CURRENT_APKS / "car-probe-whitelist-title-navi-v11.apk"
 DEFAULT_WHITELIST_APK = DEFAULT_PROBE_APK
 DEFAULT_STORE_CACHE_PROBE_APK = DEFAULT_PROBE_APK
@@ -70,7 +70,7 @@ a.button{display:block;background:#1462a5;color:#fff;text-align:center;padding:1
 <li>观察能否进一步进入系统“设置”或“安全”页面。</li></ol>
 <p class="note">若浏览器不产生通知，或无法长按，请记录现象；不要反复尝试。</p></div>
 <div class="section"><h2>当前安装版</h2>
-<a class="button" href="/diplay-carplay.apk">DiPlay v12（CarPlay；sogou.map）</a>
+<a class="button" href="/diplay-carplay.apk">DiPlay v13（CarPlay；sogou.map）</a>
 <a class="button" href="/lan-cast.apk">LAN Cast v5（DLNA；com.uu.uunavi）</a>
 <a class="button" href="/car-probe-whitelist.apk">车机诊断 v11（title.navi）</a>
 <a class="button" href="/tvbox-android42.apk">TVBox v5（com.tencent.navsns）</a>

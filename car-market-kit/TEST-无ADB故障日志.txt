@@ -52,5 +52,6 @@ Mac 当前 IP 可用命令查询：ipconfig getifaddr en0
   真实 Mac HTTP 接口已收下合成 ZIP、校验 SHA256 后清理测试文件。
 - 尚未在实际 Android 4.2.2 车机上验证按钮显示及播放器兼容性；
   真车测试结果才是最终结论。
-- DiPlay CarPlay v12 仍为上一个已发布版本；点击「连接」闪退的自动日志版本
-  v13 需要另外完成原厂 Android 4.2 工程编译，不能当作已经上线。
+- DiPlay CarPlay v13 已完成 Android 4.2.2 ARM32 模拟器启动、首次连接按钮日志、
+  手动上传 Mac HTTP 200，已作为「连接闪退诊断版」发布。
+  真车机点击「连接」后实际握手仍需要和 iPhone 配对，尚未证实闪退原因已修复。

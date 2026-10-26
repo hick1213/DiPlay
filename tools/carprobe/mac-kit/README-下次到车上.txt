@@ -2,7 +2,7 @@
 
 本地位置：/Users/hick/github/DiPlay/car-market-kit/
 所有安装 APK 统一放在 /Users/hick/github/DiPlay/car-market-kit/APKs/，
-只保留 DiPlay v12 / LAN Cast v6 / 车机诊断 v11 / TVBox v5。
+只保留 DiPlay v13 / LAN Cast v6 / 车机诊断 v11 / TVBox v5。
 本地私有认证文件保存在仓库 .private/mfi-test-20261026/offline-mfi/
 （不会被 Git 提交或作为独立下载开放）；无需带移动硬盘。
 仅共享已授权拥有的车机测试网络，不会自动更改车机系统。
@@ -11,8 +11,8 @@
    启动后会自动在 Mac 浏览器打开“车机 Android 4.2 · 最新安装包”页面。
    车机浏览器访问同一个地址：http://<Mac 当前局域网 IP>:18816/
    页面统一展示当前 4 个 APK（旧的无身份 DiPlay 基线不开放下载）：
-   DiPlay v12：
-   http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
+   DiPlay v13：
+   http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v13.apk
    LAN Cast v6：
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
    车机深度诊断 v11：
@@ -22,7 +22,9 @@
    局域网投屏当前为 LAN Cast v6，继承 DLNA 修复，新增黑屏故障日志、
    主界面手动上传及自动发现 Mac 的诊断上传（UDP 18817 / HTTP 18816）。
    历史 APK（包括无身份基线包）已经清理，安装页仅显示最新四个应用。
-   DiPlay v12 使用 sogou.map 包名；按一次 Back 显示控制栏，闲置 3 秒自动隐藏；期间点按顶部重新计时，快速再次 Back 仍可退出。
+   DiPlay v13 使用 sogou.map 包名；保留 v12 的自动隐藏控制栏、FPS、双向音频，
+   新增「DiPlay 故障日志」桌面入口，自动记录「连接」初始化阶段并向 Mac 上传。
+   仍需真车机验证具体闪退原因；模拟器没有配对 iPhone。
    断开后需等待 Wi-Fi Direct 清理结束，再点击连接；避免新群组被旧连接清理线程移除。
    v9 修复双向音频；v10 优化触摸 MOVE 队列、视频时间戳与解码器缓冲；v11 可选 30/35/40/45/50/55/60 FPS 并恢复后台画面；v12 控制栏 3 秒空闲隐藏并记录 CarPlay 语音状态以排查高德按钮。
    顶部状态可查看 CarPlay 音频资源、iPhone 下行 RTP 和 Android 的 AudioTrack PCM/AAC/Opus 播放状态。

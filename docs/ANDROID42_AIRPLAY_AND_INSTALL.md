@@ -10,6 +10,12 @@
 脱敏日志 ZIP，不需要车机 ADB 或手动输入 IP。默认自动上报可在
 独立日志界面关闭。此功能不代表已支持 AirPlay。
 
+**DiPlay v13 连接闪退诊断（2026-10-27 更新）：** ARM32 Android 4.2.2
+模拟器上已运行，MFi 自检通过，点击「连接」能保留预检查点，
+独立「DiPlay 故障日志」界面可通过自动发现将 ZIP 送至 Mac（HTTP 200）。
+新增 Java/LinkageError 的异常落盘、连接中断的独立服务补传；
+未配对真实 iPhone，不能据此认定原车「连接后闪退」已解决。
+
 - 当前 `tools/lan-cast-android42` 是 DLNA/UPnP MediaRenderer，不是 AirPlay 接收器。
 - iPhone AirPlay「屏幕镜像」（视频 H.264/音频）与 App 的 AirPlay 视频投放/HLS、AirPlay 音乐是不同流与控制流程；不能只加一条 mDNS 宣告就称为支持。
 - 评估上游：<https://github.com/jqssun/android-airplay-server>（基于 UxPlay、JNI、MediaCodec/SurfaceView，**最低 Android 7.0**）及 <https://github.com/FDH2/UxPlay>（GPLv3、Unix/GStreamer）。未经 API 17 移植验证，不能把上游 APK 改 `minSdk` 后直接安装。

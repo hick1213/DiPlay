@@ -215,12 +215,13 @@ class MarketHTTP(BaseHTTPRequestHandler):
                 ).format(*(escape(value, quote=True) for value in
                            (category, title, version, package, details, url)))
 
-            if "/diplay-android42-toolbar-voice-v12.apk" in offered:
+            if "/diplay-android42-toolbar-voice-v13.apk" in offered:
                 apps.append(card(
-                    "无线 CarPlay", "DiPlay", "v12", "sogou.map",
-                    "画面/触控/Android 声音输出；FPS 30～60 可选；Back 显示控制栏后闲置 3 秒隐藏；"
-                    "恢复前后台画面，包含语音诊断。",
-                    "/diplay-android42-toolbar-voice-v12.apk"))
+                    "无线 CarPlay", "DiPlay", "v13", "sogou.map",
+                    "保留 CarPlay 画面/触控/音频、FPS 30～60 和自动隐藏控制栏；"
+                    "新增连接阶段持久日志、独立「DiPlay 故障日志」图标及自动上传 Mac。"
+                    "属于闪退诊断版，尚未确认原车点击连接闪退已修复。",
+                    "/diplay-android42-toolbar-voice-v13.apk"))
 
             if "/lan-cast-android42.apk" in offered:
                 apps.append(card(
