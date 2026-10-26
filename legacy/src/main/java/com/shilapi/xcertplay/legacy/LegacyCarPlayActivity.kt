@@ -44,6 +44,9 @@ import com.shilapi.xcertplay.orchestration.ManualHotspotSecurity
 import com.shilapi.xcertplay.orchestration.MfiTarget
 import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.transport.Iap2IdentificationConfig
+import com.shilapi.xcertplay.diagnostic.HeadUnitDiagnostics
+import com.shilapi.xcertplay.diagnostic.HeadUnitAutoUploader
+import com.shilapi.xcertplay.diagnostic.HeadUnitUploadService
 
 /** Android 4.2 head-unit host: wireless CarPlay, H.264, PCM/AAC and touch, with native Views. */
 class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchListener {
@@ -83,6 +86,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HeadUnitDiagnostics.event("UI_CREATE", "CarPlay main activity SDK=" + Build.VERSION.SDK_INT)
         enterFullscreen()
         mode = runCatching {
             WirelessHotspotMode.valueOf(prefs.getString("mode", WirelessHotspotMode.WIFI_P2P.name)!!)
@@ -113,6 +117,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         connectButton = Button(this).apply {
             text = "连接"
             setOnClickListener {
+                HeadUnitDiagnostics.event("BUTTON",
+                    if (controller == null) "Connect pressed" else "Disconnect pressed")
                 if (controller == null) startConnection() else disconnect()
             }
         }
@@ -159,7 +165,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                 "1. 打开车机 Wi-Fi 和蓝牙，并与 iPhone 完成蓝牙配对\n" +
                 "2. 选择无线网络方式和要连接的 iPhone\n" +
                 "3. 点击「连接」；配对后从 iPhone 同意使用 CarPlay\n" +
-                "4. 点击顶部状态文字可测试车机声音；全屏时按 Back 显示控制栏，3 秒无操作自动隐藏"
+                "4. 点击顶部状态文字可测试车机声音；全屏时按 Back 显示控制栏，3 秒无操作自动隐藏\n" +
+                "5. 点击连接后异常退出时，诊断会自动传回同局域网 Mac；可从「DiPlay 故障日志」图标查看"
             setTextColor(Color.WHITE)
             setTextSize(20f)
             gravity = Gravity.CENTER
@@ -318,17 +325,22 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     private fun startConnection() {
+        HeadUnitDiagnostics.event("CONNECT_CHECK", "startConnection mode=" + mode.name +
+            " API=" + Build.VERSION.SDK_INT)
         if (disconnecting) {
+            HeadUnitDiagnostics.event("CONNECT_CHECK", "prior disconnect in progress")
             updateStatus("正在释放上一次 Wi-Fi Direct 连接，请稍候…")
             return
         }
         if (controller != null) return
         if (mode != WirelessHotspotMode.WIFI_P2P &&
             prefs.getString("ssid-${mode.name}", "").isNullOrBlank()) {
+            HeadUnitDiagnostics.event("CONNECT_CHECK", "wireless name not configured")
             configureNetwork { startConnection() }
             return
         }
         if (prefs.getString("iphone-address", null).isNullOrBlank()) {
+            HeadUnitDiagnostics.event("CONNECT_CHECK", "paired phone not selected")
             chooseIphone { startConnection() }
             return
         }
@@ -339,6 +351,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
             if (Build.VERSION.SDK_INT >= 33) needed.add(Manifest.permission.NEARBY_WIFI_DEVICES)
             val missing = needed.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
             if (missing.isNotEmpty()) {
+                HeadUnitDiagnostics.event("CONNECT_CHECK", "permissions requested count=" + missing.size)
                 requestPermissions(missing.toTypedArray(), REQUEST_PERMISSIONS)
                 return
             }
@@ -358,10 +371,16 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     private fun connect() {
         if (controller != null || disconnecting) return
+        HeadUnitDiagnostics.connectPending("step=connect-enter mode=" + mode.name +
+            " API=" + Build.VERSION.SDK_INT)
+        HeadUnitUploadService.scheduleAfterConnectionAttempt(this)
         updateStatus("正在初始化无线 CarPlay…")
         try {
+            HeadUnitDiagnostics.connectPending("step=check-local-authentication")
             val mfiDirectory = state.ensureLocalAuthentication()
+            HeadUnitDiagnostics.connectPending("step=load-identity")
             val identity = state.identity()
+            HeadUnitDiagnostics.connectPending("step=configure-runtime")
             val mac = LegacyState.deviceAddress(identity.publicKey)
             val size = resources.displayMetrics
             val width = size.widthPixels.coerceIn(320, 1280) and -2
@@ -417,9 +436,11 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                 model = "DiPlay-Android42",
                 oemLabel = "DiPlay",
             )
+            HeadUnitDiagnostics.connectPending("step=create-audio-video-sink")
             val sink = LegacyMediaSink(this, width, height, ::report)
             if (video.holder.surface.isValid) sink.setSurface(video.holder.surface)
             renderer = sink
+            HeadUnitDiagnostics.connectPending("step=create-carplay-controller")
             val next = CarPlayController(
                 context = this,
                 config = config,
@@ -428,6 +449,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                 pairings = state.pairings(),
                 listener = object : AirPlaySessionListener {
                     override fun onSessionActive(session: AirPlaySession) {
+                        HeadUnitDiagnostics.connectFinished("AirPlay session active")
+                        HeadUnitUploadService.cancel(this@LegacyCarPlayActivity)
                         active = true
                         runOnUiThread {
                             firstVideoFrame = false
@@ -452,6 +475,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                     }
 
                     override fun onSessionEnded(session: AirPlaySession) {
+                        HeadUnitDiagnostics.event("SESSION_END", "AirPlay session ended")
                         active = false
                         runOnUiThread {
                             firstVideoFrame = false
@@ -462,7 +486,10 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                         }
                     }
 
-                    override fun onTransportError(message: String) = report(message)
+                    override fun onTransportError(message: String) {
+                        HeadUnitDiagnostics.event("TRANSPORT_ERROR", message)
+                        report(message)
+                    }
 
                     override fun onCommand(session: AirPlaySession, type: String, params: Map<String, Any?>) {
                         if (type != "modesChanged") return
@@ -507,15 +534,33 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
             )
             controller = next
             connectButton.text = "断开"
+            HeadUnitDiagnostics.connectPending("step=start-controller")
             next.start()
+            HeadUnitDiagnostics.event("CONNECT_STEP", "Controller.start returned")
         } catch (error: Exception) {
+            HeadUnitDiagnostics.recordException("CarPlay initialization", error)
+            HeadUnitAutoUploader.schedule(this, "CarPlay connection exception")
             Log.e(TAG, "Legacy CarPlay failed to initialize", error)
             updateStatus("无线 CarPlay 初始化失败：${error.message ?: error.javaClass.simpleName}（需合法 MFi 身份文件）")
+            HeadUnitDiagnostics.connectFinished("initialization exception")
+            HeadUnitUploadService.cancel(this)
+            disconnect()
+        } catch (error: LinkageError) {
+            HeadUnitDiagnostics.recordException("Android API compatibility", error)
+            HeadUnitAutoUploader.schedule(this, "Android API linkage failure")
+            updateStatus("车机系统 API 不兼容：${error.javaClass.simpleName}，请查看故障日志。")
+            HeadUnitDiagnostics.connectFinished("Android API linkage failure")
+            HeadUnitUploadService.cancel(this)
             disconnect()
         }
     }
 
     private fun onConnectionStatus(next: CarPlayStatus) {
+        HeadUnitDiagnostics.event("CONNECTION_STATUS", next.javaClass.simpleName)
+        if (next is CarPlayStatus.Failed) {
+            HeadUnitDiagnostics.flagIncident("CarPlay connection failed: " + next.message)
+            HeadUnitAutoUploader.schedule(this, "CarPlay connection failed")
+        }
         when (next) {
             is CarPlayStatus.Failed -> updateStatus("CarPlay 连接失败：${next.message}")
             CarPlayStatus.StartingHotspot -> updateStatus("正在准备 ${modeLabel(mode)} 无线网络…")
@@ -536,6 +581,11 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     private fun report(value: String) {
         Log.i(TAG, value)
+        if (value.startsWith("Android 4.2") || value.startsWith("H.264") ||
+            value.startsWith("Audio42:") || value.startsWith("Microphone42:") ||
+            value.startsWith("CarPlay") || value.startsWith("VideoPerf42:")) {
+            HeadUnitDiagnostics.event("CARPLAY", value)
+        }
         if (value.startsWith("Microphone42: ")) {
             runOnUiThread { microphoneStatus = value.removePrefix("Microphone42: ") }
         }
@@ -562,6 +612,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     override fun onResume() {
         super.onResume()
+        HeadUnitDiagnostics.event("UI_RESUME", "CarPlay returned to foreground")
         enterFullscreen()
         // SurfaceView may have disposed and recreated its Surface while in background.
         // The new attachment triggers decoder reinitialization and an IDR request,
@@ -572,6 +623,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     override fun onStop() {
+        HeadUnitDiagnostics.event("UI_STOP", "CarPlay backgrounded")
         uiHandler.removeCallbacks(hideControls)
         toolbarTouchInProgress = false
         // SurfaceView can return a different native output buffer after Home/Recents.
@@ -654,6 +706,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     private fun disconnect() {
+        HeadUnitDiagnostics.connectFinished("connection canceled/disconnected")
+        HeadUnitUploadService.cancel(this)
         uiHandler.removeCallbacks(hideControls)
         val oldController = controller
         controller = null
@@ -689,6 +743,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        HeadUnitDiagnostics.event("SURFACE", "CarPlay surface created")
         renderer?.setSurface(holder.surface)
     }
 
@@ -697,6 +752,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        HeadUnitDiagnostics.event("SURFACE", "CarPlay surface destroyed")
         renderer?.setSurface(null)
     }
 
@@ -728,6 +784,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     override fun onDestroy() {
+        HeadUnitDiagnostics.event("UI_DESTROY", "CarPlay Activity destroyed")
         uiHandler.removeCallbacks(hideControls)
         disconnect()
         super.onDestroy()
@@ -746,7 +803,7 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     companion object {
         private const val TAG = "DiPlay-Android42"
-        private const val BUILD_LABEL = "Android 4.2 控制栏自动隐藏 / 语音诊断 v12"
+        private const val BUILD_LABEL = "Android 4.2 自动故障上报 v13"
         private const val REQUEST_PERMISSIONS = 42
         private const val FIRST_FRAME_CONTROLS_MILLIS = 3_000L
         private const val DISCONNECT_TIMEOUT_MILLIS = 20_000L

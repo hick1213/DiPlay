@@ -21,8 +21,8 @@ android {
         applicationId = legacyApplicationId
         minSdk = 17
         targetSdk = 28
-        versionCode = 12
-        versionName = "0.2.31-android42-toolbar-voice-diagnostic-v12"
+        versionCode = 13
+        versionName = "0.2.32-android42-auto-diagnostic-v13"
         multiDexEnabled = true
     }
 

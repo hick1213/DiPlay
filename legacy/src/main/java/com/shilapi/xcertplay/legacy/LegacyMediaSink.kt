@@ -15,6 +15,8 @@ import com.shilapi.xcertplay.airplay.MediaSink
 import com.shilapi.xcertplay.airplay.MicrophoneConfig
 import com.shilapi.xcertplay.airplay.VideoCodec
 import com.shilapi.xcertplay.media.MediaCodecSupport
+import com.shilapi.xcertplay.diagnostic.HeadUnitDiagnostics
+import com.shilapi.xcertplay.diagnostic.HeadUnitAutoUploader
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
@@ -43,6 +45,7 @@ internal class LegacyMediaSink(
 
     private val closed = AtomicBoolean(false)
     private val firstVideoPacketSeen = AtomicBoolean(false)
+    @Volatile private var lastVideoPacketNanos = 0L
     private val queueDroppedFrames = AtomicLong(0)
     private val videoEvents = ArrayBlockingQueue<VideoEvent>(8)
     /** Last requested output; repeated surfaceChanged/onResume must not discard IDR frames. */
@@ -88,7 +91,11 @@ internal class LegacyMediaSink(
     }
 
     override fun onVideoConfig(type: Int, codecData: ByteArray) {
-        if (type == MAIN_SCREEN) enqueue(VideoEvent.Configure(requestedCodec, codecData.copyOf()))
+        if (type == MAIN_SCREEN) {
+            HeadUnitDiagnostics.event("VIDEO_CONFIG", "codec=" + requestedCodec.name +
+                " csdBytes=" + codecData.size + " dimensions=" + width + "x" + height)
+            enqueue(VideoEvent.Configure(requestedCodec, codecData.copyOf()))
+        }
     }
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray) {
@@ -97,6 +104,7 @@ internal class LegacyMediaSink(
 
     override fun onVideoFrame(type: Int, naluBytes: ByteArray, senderNanos: Long, arrivalNanos: Long) {
         if (type == MAIN_SCREEN && naluBytes.isNotEmpty()) {
+            lastVideoPacketNanos = System.nanoTime()
             if (firstVideoPacketSeen.compareAndSet(false, true)) {
                 report("Android 4.2 video data reached decoder queue")
             }
@@ -146,6 +154,23 @@ internal class LegacyMediaSink(
         val videoSync = LegacyVideoSyncState()
         var surfaceGeneration = 0L
         var keyframeWaitDrops = 0L
+        var decoderConfiguredAt = 0L
+        var blackScreenReported = false
+
+        fun checkNoFirstFrame() {
+            if (decoder == null || surface?.isValid != true || rendered || blackScreenReported ||
+                !firstVideoPacketSeen.get() || decoderConfiguredAt == 0L) return
+            val now = System.nanoTime()
+            if (now - decoderConfiguredAt > 10_000_000_000L &&
+                now - lastVideoPacketNanos < 4_000_000_000L) {
+                blackScreenReported = true
+                HeadUnitDiagnostics.flagIncident("CarPlay H264: no first rendered frame in 10s" +
+                    " codec=H264 size=" + width + "x" + height +
+                    " input=" + framesReceived + " queued=" + framesQueued +
+                    " noInput=" + missingInputBuffers + " keyframeDrops=" + keyframeWaitDrops)
+                HeadUnitAutoUploader.schedule(context, "CarPlay black screen before first frame")
+            }
+        }
 
         fun requestKeyFrameIfDue(force: Boolean = false) {
             if (decoder == null || surface?.isValid != true || rendered) return
@@ -203,6 +228,8 @@ internal class LegacyMediaSink(
             lastReportedDrop = queueDroppedFrames.get()
             videoSync.reset()
             keyframeWaitDrops = 0L
+            decoderConfiguredAt = 0L
+            blackScreenReported = false
         }
 
         fun configure() {
@@ -227,7 +254,10 @@ internal class LegacyMediaSink(
                     codec.configure(format, output, null, 0)
                     codec.start()
                     decoder = codec
+                    decoderConfiguredAt = System.nanoTime()
                     report("Android 4.2 H.264 decoder started")
+                    HeadUnitDiagnostics.event("DECODER_START", "H264 generation=" +
+                        surfaceGeneration + " w=" + width + " h=" + height)
                     Log.i(TAG, "H.264 surface recovery generation=$surfaceGeneration waitingForIDR=true")
                     // The phone may still be sending P-frames from the previous
                     // decoder's reference chain. Request a fresh IDR immediately.
@@ -237,6 +267,8 @@ internal class LegacyMediaSink(
                     throw error
                 }
             } catch (error: Exception) {
+                HeadUnitDiagnostics.recordException("H264 decoder configure", error)
+                HeadUnitAutoUploader.schedule(context, "H264 configure error")
                 report("H.264 decoder unavailable: ${error.message}")
             }
         }
@@ -248,6 +280,7 @@ internal class LegacyMediaSink(
                     // No incoming video still needs an IDR on returning from background.
                     requestKeyFrameIfDue()
                     decoder?.let(::drainOutput)
+                    checkNoFirstFrame()
                     continue
                 }
                 when (val event = next) {
@@ -314,7 +347,7 @@ internal class LegacyMediaSink(
                                 val line = "VideoPerf42: rx=%.1ffps output=%.1ffps queueAvg=%dms " +
                                     "queueMax=%dms outputGapMax=%dms queued=%d decoded=%d queueDrops=%d " +
                                     "noInput=%d pending=%d"
-                                Log.i(TAG, line.format(windowFrames / secs, windowOutput / secs,
+                                report(line.format(windowFrames / secs, windowOutput / secs,
                                     queueDelaySumMillis / windowFrames.coerceAtLeast(1L), maxQueueDelayMillis,
                                     largestOutputGapMillis, framesQueued, framesRendered,
                                     drops - lastReportedDrop, missingInputBuffers, videoEvents.size) +
@@ -348,7 +381,10 @@ internal class LegacyMediaSink(
                                         .onFailure { Log.w(TAG, "H.264 keyframe recovery failed", it) }
                                 }
                             }
+                            checkNoFirstFrame()
                         } catch (error: Exception) {
+                            HeadUnitDiagnostics.recordException("H264 decoding frame", error)
+                            HeadUnitAutoUploader.schedule(context, "H264 frame decoding failed")
                             report("H.264 decoder failed: ${error.message}")
                             stop()
                         }
