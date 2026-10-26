@@ -12,6 +12,7 @@
    当前 DiPlay 与局域网投屏下载地址分别是：
    http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
+   局域网投屏当前为 LAN Cast v3，完善 DLNA 事件回调、协议诊断与播放防休眠；v1/v2 用于回退。
    无身份 DiPlay 基线 APK 不再显示或开放下载，原始文件仅在 Mac 本地备份。
    DiPlay v12 使用 sogou.map 包名；按一次 Back 显示控制栏，闲置 3 秒自动隐藏；期间点按顶部重新计时，快速再次 Back 仍可退出。
    断开后需等待 Wi-Fi Direct 清理结束，再点击连接；避免新群组被旧连接清理线程移除。

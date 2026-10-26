@@ -24,6 +24,7 @@ import java.net.MulticastSocket;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -42,6 +43,9 @@ public final class CastService extends Service {
     private static final String CM = "urn:schemas-upnp-org:service:ConnectionManager:1";
     private static final String RC = "urn:schemas-upnp-org:service:RenderingControl:1";
     private static final String DEV = "urn:schemas-upnp-org:device:MediaRenderer:1";
+    private static final String SINK_PROTOCOLS = "http-get:*:video/mp4:*,http-get:*:video/mpeg:*," +
+        "http-get:*:application/vnd.apple.mpegurl:*,http-get:*:application/x-mpegURL:*," +
+        "http-get:*:audio/mpeg:*";
     private static volatile CastService instance;
     private static volatile String mediaUri = "";
     private static volatile String transport = "STOPPED";
@@ -57,6 +61,8 @@ public final class CastService extends Service {
     private WifiManager.MulticastLock multicastLock;
     private InetAddress multicastAddress;
     private String uuid;
+    private LanCastEventing eventing;
+    private volatile long lastSsdpDiagnosticTime;
 
     static CastService getInstance() { return instance; }
 
@@ -71,6 +77,9 @@ public final class CastService extends Service {
         super.onCreate();
         instance = this;
         running = true;
+        eventing = new LanCastEventing(new LanCastEventing.BodyProvider() {
+            @Override public String propertySet(String service) { return eventProperties(service); }
+        });
         String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
         uuid = UUID.nameUUIDFromBytes(("car-lan-cast:" + (androidId == null ? "unknown" : androidId)).getBytes()).toString();
         startHttp();
@@ -84,6 +93,7 @@ public final class CastService extends Service {
 
     @Override public void onDestroy() {
         running = false;
+        if (eventing != null) eventing.shutdown();
         try { if (multicast != null) multicast.close(); } catch (Exception ignored) { }
         try { if (webSocket != null) webSocket.close(); } catch (Exception ignored) { }
         try { if (multicastLock != null && multicastLock.isHeld()) multicastLock.release(); } catch (Exception ignored) { }
@@ -99,8 +109,44 @@ public final class CastService extends Service {
     private void announce() { sendBroadcast(new Intent(STATUS_ACTION)); }
 
     static void updateTransport(String state) {
+        if (state.equals(transport)) return;
         transport = state;
-        if (instance != null) instance.announce();
+        if (instance != null) {
+            instance.announce();
+            instance.publishEvent(AV);
+        }
+    }
+
+    private void publishEvent(String service) {
+        LanCastEventing current = eventing;
+        if (current != null) current.changed(service);
+    }
+
+    /** GENA initial/changed variables, with XML-escaped AVTransport/RenderingControl LastChange. */
+    private String eventProperties(String service) {
+        String properties;
+        if (AV.equals(service)) {
+            // Broadcast LastChange without media URLs: they can contain signed playback
+            // tokens, and multiple LAN controllers may subscribe to this renderer.
+            String last = "<Event xmlns=\"urn:schemas-upnp-org:metadata-1-0/AVT/\">" +
+                "<InstanceID val=\"0\"><TransportState val=\"" + escape(transport) +
+                "\"/><NumberOfTracks val=\"" + (mediaUri.length() == 0 ? 0 : 1) +
+                "\"/><CurrentTransportActions val=\"Play,Pause,Stop,Seek\"/>" +
+                "</InstanceID></Event>";
+            properties = "<e:property><LastChange>" + escape(last) + "</LastChange></e:property>";
+        } else if (RC.equals(service)) {
+            String last = "<Event xmlns=\"urn:schemas-upnp-org:metadata-1-0/RCS/\">" +
+                "<InstanceID val=\"0\"><Volume channel=\"Master\" val=\"" + volume +
+                "\"/><Mute channel=\"Master\" val=\"" + (muted ? 1 : 0) +
+                "\"/></InstanceID></Event>";
+            properties = "<e:property><LastChange>" + escape(last) + "</LastChange></e:property>";
+        } else {
+            properties = "<e:property><SourceProtocolInfo></SourceProtocolInfo></e:property>" +
+                "<e:property><SinkProtocolInfo>" + escape(SINK_PROTOCOLS) + "</SinkProtocolInfo></e:property>" +
+                "<e:property><CurrentConnectionIDs>0</CurrentConnectionIDs></e:property>";
+        }
+        return "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+            "<e:propertyset xmlns:e=\"urn:schemas-upnp-org:event-1-0\">" + properties + "</e:propertyset>";
     }
 
     private void startHttp() {
@@ -176,13 +222,18 @@ public final class CastService extends Service {
         for (String line : req.split("\\r?\\n")) {
             if (line.toLowerCase().startsWith("st:")) st = line.substring(3).trim();
         }
+        long now = System.currentTimeMillis();
+        if (now - lastSsdpDiagnosticTime > 1500) {
+            lastSsdpDiagnosticTime = now;
+            Log.i(TAG, "DLNA M-SEARCH st=" + st + " peer=" + remote.getHostAddress());
+        }
         String[] all = {"upnp:rootdevice", "uuid:" + uuid, DEV, AV, CM, RC};
         for (String type : all) {
             if (!("ssdp:all".equalsIgnoreCase(st) || type.equalsIgnoreCase(st))) continue;
             String usn = "uuid:" + uuid + (type.startsWith("uuid:") ? "" : "::" + type);
             String response = "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=1800\r\nEXT:\r\n" +
                 "LOCATION: http://" + ip + ":" + port + "/device.xml\r\n" +
-                "SERVER: Android/4.2 UPnP/1.0 CarLanCast/1.0\r\n" +
+                "SERVER: Android/4.2 UPnP/1.0 CarLanCast/1.1\r\n" +
                 "ST: " + type + "\r\nUSN: " + usn + "\r\n\r\n";
             byte[] bytes = response.getBytes("UTF-8");
             multicast.send(new DatagramPacket(bytes, bytes.length, remote, remotePort));
@@ -192,7 +243,7 @@ public final class CastService extends Service {
     private void notifyAlive() throws Exception {
         String msg = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n" +
             "CACHE-CONTROL: max-age=1800\r\nLOCATION: http://" + ip + ":" + port + "/device.xml\r\n" +
-            "NT: " + DEV + "\r\nNTS: ssdp:alive\r\nSERVER: Android/4.2 UPnP/1.0 CarLanCast/1.0\r\n" +
+            "NT: " + DEV + "\r\nNTS: ssdp:alive\r\nSERVER: Android/4.2 UPnP/1.0 CarLanCast/1.1\r\n" +
             "USN: uuid:" + uuid + "::" + DEV + "\r\n\r\n";
         byte[] bytes = msg.getBytes("UTF-8");
         multicast.send(new DatagramPacket(bytes, bytes.length, multicastAddress, 1900));
@@ -213,10 +264,14 @@ public final class CastService extends Service {
                 int colon = line.indexOf(':');
                 if (colon > 0) headers.put(line.substring(0, colon).trim().toLowerCase(), line.substring(colon + 1).trim());
             }
-            if ("GET".equalsIgnoreCase(start[0])) {
-                String path = start[1].split("\\?")[0];
+            String method = start[0].toUpperCase(java.util.Locale.US);
+            String path = start[1].split("\\?")[0];
+            Log.i(TAG, "DLNA HTTP method=" + method + " path=" + path +
+                " peer=" + socket.getInetAddress().getHostAddress());
+            if ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) {
                 String body = getPage(path);
-                sendHttp(out, body == null ? 404 : 200, "text/xml; charset=utf-8", body == null ? "Not Found" : body);
+                sendHttp(out, body == null ? 404 : 200, "text/xml; charset=utf-8",
+                    body == null ? "Not Found" : body, "GET".equalsIgnoreCase(method));
             } else if ("POST".equalsIgnoreCase(start[0])) {
                 int len = Integer.parseInt(headers.containsKey("content-length") ? headers.get("content-length") : "0");
                 if (len < 0 || len > 131072) { sendHttp(out, 413, "text/plain", "Too large"); return; }
@@ -227,23 +282,49 @@ public final class CastService extends Service {
                     if (n < 0) return;
                     offset += n;
                 }
+                Log.i(TAG, "DLNA SOAP action=" + soapAction(headers.get("soapaction"), new String(bodyBytes, "UTF-8")) +
+                    " path=" + path);
                 String response = handleSoap(start[1], headers.get("soapaction"), new String(bodyBytes, "UTF-8"));
                 sendHttp(out, 200, "text/xml; charset=utf-8", response);
             } else if ("SUBSCRIBE".equalsIgnoreCase(start[0])) {
-                // Some DLNA controllers require a GENA subscription before SOAP commands.
-                // This minimal renderer is polling-only and does not dispatch event callbacks.
-                String sid = headers.get("sid");
-                if (sid == null || !sid.startsWith("uuid:")) sid = "uuid:" + uuid;
-                out.write(("HTTP/1.1 200 OK\r\nSID: " + sid +
-                    "\r\nTIMEOUT: Second-1800\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").getBytes("UTF-8"));
-                out.flush();
+                String service = eventService(path);
+                LanCastEventing.Reply reply = eventing.subscribe(service, headers.get("callback"),
+                    headers.get("sid"), headers.get("nt"), headers.get("timeout"), socket.getInetAddress());
+                sendSubscriptionReply(out, reply);
+                if (reply.status == 200 && headers.get("sid") == null) eventing.initialEvent(reply.sid);
             } else if ("UNSUBSCRIBE".equalsIgnoreCase(start[0])) {
-                sendHttp(out, 200, "text/plain", "");
+                boolean removed = eventing.unsubscribe(eventService(path), headers.get("sid"));
+                sendHttp(out, removed ? 200 : 412, "text/plain", "");
             } else {
                 sendHttp(out, 405, "text/plain", "Method not allowed");
             }
         } catch (Exception e) { Log.w(TAG, "HTTP peer failed: " + e.toString()); }
         finally { try { socket.close(); } catch (Exception ignored) { } }
+    }
+
+    private static String soapAction(String actionHeader, String body) {
+        String action = "";
+        if (actionHeader != null) {
+            int hash = actionHeader.indexOf('#');
+            if (hash >= 0) action = actionHeader.substring(hash + 1).replace("\"", "").trim();
+        }
+        if (action.length() == 0) action = xmlAction(body);
+        return action.matches("[A-Za-z][A-Za-z0-9]*") ? action : "invalid";
+    }
+
+    private static String eventService(String path) {
+        if ("/event/avtransport".equalsIgnoreCase(path)) return AV;
+        if ("/event/connectionmanager".equalsIgnoreCase(path)) return CM;
+        if ("/event/renderingcontrol".equalsIgnoreCase(path)) return RC;
+        return null;
+    }
+
+    private static void sendSubscriptionReply(OutputStream out, LanCastEventing.Reply reply) throws Exception {
+        String header = "HTTP/1.1 " + reply.status + (reply.status == 200 ? " OK" : " Precondition Failed") + "\r\n" +
+            (reply.status == 200 ? "SID: " + reply.sid + "\r\nTIMEOUT: Second-" + reply.timeoutSeconds + "\r\n" : "") +
+            "Content-Length: 0\r\nConnection: close\r\n\r\n";
+        out.write(header.getBytes("UTF-8"));
+        out.flush();
     }
 
     private static String readLine(InputStream in) throws Exception {
@@ -259,12 +340,16 @@ public final class CastService extends Service {
     }
 
     private static void sendHttp(OutputStream out, int status, String type, String body) throws Exception {
+        sendHttp(out, status, type, body, true);
+    }
+
+    private static void sendHttp(OutputStream out, int status, String type, String body, boolean sendBody) throws Exception {
         byte[] data = body.getBytes("UTF-8");
         String header = "HTTP/1.1 " + status + (status == 200 ? " OK" : " Error") + "\r\n" +
             "Content-Type: " + type + "\r\nContent-Length: " + data.length + "\r\n" +
             "Access-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n";
         out.write(header.getBytes("UTF-8"));
-        out.write(data);
+        if (sendBody) out.write(data);
         out.flush();
     }
 
@@ -321,6 +406,15 @@ public final class CastService extends Service {
                 .append("</name><dataType>").append(numeric ? "ui4" : "string")
                 .append("</dataType></stateVariable>");
         }
+        if (AV.equals(type) || RC.equals(type)) {
+            b.append("<stateVariable sendEvents=\"yes\"><name>LastChange</name>")
+                .append("<dataType>string</dataType></stateVariable>");
+        } else if (CM.equals(type)) {
+            for (String state : new String[] { "SourceProtocolInfo", "SinkProtocolInfo", "CurrentConnectionIDs" }) {
+                b.append("<stateVariable sendEvents=\"yes\"><name>").append(state)
+                    .append("</name><dataType>string</dataType></stateVariable>");
+            }
+        }
         b.append("</serviceStateTable></scpd>");
         return b.toString();
     }
@@ -366,10 +460,17 @@ public final class CastService extends Service {
                 if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("rtsp://")) {
                     mediaUri = url;
                     updateTransport("STOPPED");
-                    Log.i(TAG, "Media URI received (length=" + url.length() + ")");
+                    publishEvent(AV);
+                    String host = "unknown";
+                    try { host = new URI(url).getHost(); } catch (Exception ignored) { }
+                    Log.i(TAG, "DLNA SetAVTransportURI accepted scheme=" +
+                        url.substring(0, url.indexOf(':')) + " host=" + host + " length=" + url.length());
+                } else {
+                    Log.w(TAG, "DLNA SetAVTransportURI rejected scheme=unsupported/empty length=" + url.length());
                 }
             } else if ("Play".equals(action)) {
                 if (mediaUri.length() > 0) {
+                    Log.i(TAG, "DLNA Play accepted currentUri=true");
                     if ("PAUSED_PLAYBACK".equals(transport)) playbackCommand("play", 0);
                     else {
                         Intent play = new Intent(this, CastPlayerActivity.class);
@@ -378,6 +479,8 @@ public final class CastService extends Service {
                         startActivity(play);
                     }
                     updateTransport("PLAYING");
+                } else {
+                    Log.w(TAG, "DLNA Play ignored: no media URI previously received");
                 }
             } else if ("Pause".equals(action)) {
                 playbackCommand("pause", 0);
@@ -407,9 +510,7 @@ public final class CastService extends Service {
             }
         } else if (CM.equals(type)) {
             if ("GetProtocolInfo".equals(action)) {
-                args = "<Source></Source><Sink>http-get:*:video/mp4:*,http-get:*:video/mpeg:*," +
-                    "http-get:*:application/vnd.apple.mpegurl:*,http-get:*:application/x-mpegURL:*," +
-                    "http-get:*:audio/mpeg:*</Sink>";
+                args = "<Source></Source><Sink>" + escape(SINK_PROTOCOLS) + "</Sink>";
             } else if ("GetCurrentConnectionIDs".equals(action)) args = "<ConnectionIDs>0</ConnectionIDs>";
             else if ("GetCurrentConnectionInfo".equals(action)) {
                 args = "<RcsID>0</RcsID><AVTransportID>0</AVTransportID><ProtocolInfo></ProtocolInfo>" +
@@ -426,6 +527,7 @@ public final class CastService extends Service {
                     int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, muted ? 0 : max * volume / 100, 0);
                 }
+                publishEvent(RC);
             } else if ("GetMute".equals(action)) args = "<CurrentMute>" + (muted ? "1" : "0") + "</CurrentMute>";
             else if ("SetMute".equals(action)) {
                 muted = "1".equals(xmlValue(body, "DesiredMute"));
@@ -434,6 +536,7 @@ public final class CastService extends Service {
                     int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, muted ? 0 : max * volume / 100, 0);
                 }
+                publishEvent(RC);
             }
         }
         return "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +

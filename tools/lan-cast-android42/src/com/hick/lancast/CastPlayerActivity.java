@@ -10,8 +10,10 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.MediaController;
 import android.widget.TextView;
@@ -19,6 +21,7 @@ import android.widget.VideoView;
 
 /** Uses Android's platform decoders, without pretending unsupported DRM formats work. */
 public final class CastPlayerActivity extends Activity {
+    private static final String TAG = "CarLanCast";
     private VideoView video;
     private TextView error;
     static volatile int positionMs;
@@ -53,6 +56,10 @@ public final class CastPlayerActivity extends Activity {
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        // VideoView outlives the receiving dashboard. Without its own keep-awake
+        // flag, the screen can doze between Bilibili playback and the next cast,
+        // and the head unit stops answering new DLNA discovery/control sockets.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         FrameLayout layout = new FrameLayout(this);
         layout.setBackgroundColor(Color.BLACK);
         video = new VideoView(this);
@@ -69,6 +76,7 @@ public final class CastPlayerActivity extends Activity {
         video.setMediaController(new MediaController(this));
         video.setOnErrorListener(new MediaPlayer.OnErrorListener() {
             @Override public boolean onError(MediaPlayer mp, int what, int extra) {
+                Log.e(TAG, "DLNA Android player error what=" + what + " extra=" + extra);
                 error.setText("当前车机解码器无法播放该媒体 (" + what + ", " + extra + ")");
                 error.setVisibility(View.VISIBLE);
                 CastService.updateTransport("STOPPED");
@@ -76,7 +84,18 @@ public final class CastPlayerActivity extends Activity {
             }
         });
         video.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override public void onCompletion(MediaPlayer mp) { CastService.updateTransport("STOPPED"); }
+            @Override public void onCompletion(MediaPlayer mp) {
+                Log.i(TAG, "DLNA Android player completed");
+                CastService.updateTransport("STOPPED");
+                // Return to the receiver dashboard, whose keep-screen-on policy
+                // preserves discoverability between successive cast sessions.
+                finish();
+            }
+        });
+        video.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+            @Override public void onPrepared(MediaPlayer mp) {
+                Log.i(TAG, "DLNA Android player prepared successfully");
+            }
         });
         String url = getIntent().getStringExtra("mediaUri");
         if (url != null && (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("rtsp://"))) {

@@ -8,7 +8,7 @@ sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$sdk_dir/build-tools/35.0.0"
 android_jar="$sdk_dir/platforms/android-21/android.jar"
 keystore="$HOME/.android/debug.keystore"
-output_apk="$output_dir/lan-cast-android42-v1.apk"
+output_apk="$output_dir/lan-cast-android42-v3.apk"
 
 if [ -e "$output_apk" ]; then
     echo "Preserving existing APK, refusing to overwrite: $output_apk" >&2
@@ -26,7 +26,8 @@ mkdir -p "$build_dir/classes" "$build_dir/dex"
 javac -source 7 -target 7 -cp "$android_jar" -d "$build_dir/classes" \
     "$source_dir/src/com/hick/lancast/LanCastActivity.java" \
     "$source_dir/src/com/hick/lancast/CastPlayerActivity.java" \
-    "$source_dir/src/com/hick/lancast/CastService.java"
+    "$source_dir/src/com/hick/lancast/CastService.java" \
+    "$source_dir/src/com/hick/lancast/LanCastEventing.java"
 
 "$build_tools/d8" --min-api 17 --lib "$android_jar" --output "$build_dir/dex" \
     "$build_dir"/classes/com/hick/lancast/*.class
