@@ -34,7 +34,7 @@ DEFAULT_DIAGNOSTIC_APK = Path(
     "/Users/hick/github/DiPlay/car-market-kit/APKs/car-probe-whitelist-title-navi-v11.apk"
 )
 DEFAULT_LAN_CAST_APK = Path(
-    "/Users/hick/github/DiPlay/car-market-kit/APKs/lan-cast-android42-v4.apk"
+    "/Users/hick/github/DiPlay/car-market-kit/APKs/lan-cast-android42-v5.apk"
 )
 DEFAULT_LOG_DIR = Path("/Users/hick/github/DiPlay/car-market-kit/logs")
 
@@ -350,7 +350,7 @@ def main(argv=None):
         additional_apks = {
             "/lan-cast-android42.apk": (
                 args.lan_cast_apk,
-                "下载车机局域网投屏 LAN Cast v4（腾讯 DLNA 路径修复）"),
+                "下载车机局域网投屏 LAN Cast v5（DLNA 服务声明兼容性）"),
         }
         if args.mfi_test_apk is not None:
             mfi_label = "下载 DiPlay Android 4.2 v12（顶部操作栏 3 秒自动隐藏，语音诊断）"

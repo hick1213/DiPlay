@@ -95,6 +95,9 @@ public final class CastService extends Service {
     @Override public void onDestroy() {
         running = false;
         if (eventing != null) eventing.shutdown();
+        // Explicitly invalidate cached UPnP descriptions when the receiver exits.
+        // Otherwise controllers may keep the older SCPD for up to 30 minutes.
+        try { notifyAvailability(false); } catch (Exception ignored) { }
         try { if (multicast != null) multicast.close(); } catch (Exception ignored) { }
         try { if (webSocket != null) webSocket.close(); } catch (Exception ignored) { }
         try { if (multicastLock != null && multicastLock.isHeld()) multicastLock.release(); } catch (Exception ignored) { }
@@ -196,8 +199,15 @@ public final class CastService extends Service {
                     multicast.joinGroup(multicastAddress);
                     byte[] buffer = new byte[8192];
                     long lastAlive = 0;
+                    boolean initialNotice = false;
                     while (running) {
                         if (port > 0 && ip.length() > 0 && System.currentTimeMillis() - lastAlive > 18000) {
+                            if (!initialNotice) {
+                                // UPnP 1.0 clients may cache the previous description even
+                                // after ssdp:alive. byebye followed by alive forces re-fetch.
+                                notifyAvailability(false);
+                                initialNotice = true;
+                            }
                             notifyAlive();
                             lastAlive = System.currentTimeMillis();
                         }
@@ -242,12 +252,25 @@ public final class CastService extends Service {
     }
 
     private void notifyAlive() throws Exception {
-        String msg = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n" +
-            "CACHE-CONTROL: max-age=1800\r\nLOCATION: http://" + ip + ":" + port + "/device.xml\r\n" +
-            "NT: " + DEV + "\r\nNTS: ssdp:alive\r\nSERVER: Android/4.2 UPnP/1.0 CarLanCast/1.1\r\n" +
-            "USN: uuid:" + uuid + "::" + DEV + "\r\n\r\n";
-        byte[] bytes = msg.getBytes("UTF-8");
-        multicast.send(new DatagramPacket(bytes, bytes.length, multicastAddress, 1900));
+        notifyAvailability(true);
+    }
+
+    private void notifyAvailability(boolean available) throws Exception {
+        if (multicast == null || multicast.isClosed() || multicastAddress == null ||
+                ip.length() == 0 || port == 0 || uuid == null) return;
+        String[] types = {"upnp:rootdevice", "uuid:" + uuid, DEV, AV, CM, RC};
+        for (String type : types) {
+            String usn = "uuid:" + uuid + (type.startsWith("uuid:") ? "" : "::" + type);
+            String msg = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n" +
+                (available ? "CACHE-CONTROL: max-age=1800\r\nLOCATION: http://" + ip +
+                    ":" + port + "/device.xml\r\n" : "") +
+                "NT: " + type + "\r\nNTS: ssdp:" + (available ? "alive" : "byebye") +
+                "\r\nSERVER: Android/4.2 UPnP/1.0 CarLanCast/1.4\r\n" +
+                "USN: " + usn + "\r\n\r\n";
+            byte[] bytes = msg.getBytes("UTF-8");
+            multicast.send(new DatagramPacket(bytes, bytes.length, multicastAddress, 1900));
+        }
+        if (!available) Log.i(TAG, "DLNA SSDP byebye sent; old description cache invalidated");
     }
 
     private void handleHttp(Socket socket) {
@@ -372,7 +395,8 @@ public final class CastService extends Service {
         }
         if ("/avtransport.xml".equals(path)) return serviceScpd(AV, new String[] {
             "SetAVTransportURI", "GetMediaInfo", "GetTransportInfo", "GetPositionInfo",
-            "GetCurrentTransportActions", "Play", "Pause", "Stop", "Seek" });
+            "GetDeviceCapabilities", "GetTransportSettings", "GetCurrentTransportActions",
+            "Play", "Pause", "Stop", "Seek" });
         if ("/connectionmanager.xml".equals(path)) return serviceScpd(CM, new String[] {
             "GetProtocolInfo", "GetCurrentConnectionIDs", "GetCurrentConnectionInfo" });
         if ("/renderingcontrol.xml".equals(path)) return serviceScpd(RC,
@@ -381,8 +405,12 @@ public final class CastService extends Service {
     }
 
     private static String serviceDesc(String type, String path) {
+        // UPnP service IDs are case-sensitive, independent of our lower-case URL
+        // routes. MediaRenderer:1 prescribes these exact identifiers.
+        String serviceId = AV.equals(type) ? "AVTransport" :
+            CM.equals(type) ? "ConnectionManager" : "RenderingControl";
         return "<service><serviceType>" + type + "</serviceType>" +
-            "<serviceId>urn:upnp-org:serviceId:" + path + "</serviceId>" +
+            "<serviceId>urn:upnp-org:serviceId:" + serviceId + "</serviceId>" +
             // URLBase ends with '/', so relative URLs must NOT start with '/'.
             // Otherwise naive controllers concatenate two slashes and fail capability checks.
             "<SCPDURL>" + path + ".xml</SCPDURL><controlURL>control/" + path +
@@ -398,33 +426,102 @@ public final class CastService extends Service {
             String specs = actionArguments(type, a);
             if (specs.length() > 0) for (String arg : specs.split(",")) {
                 String[] pair = arg.split(":");
-                usedStates.add(pair[0]);
+                String state = stateForArgument(type, pair[0]);
+                usedStates.add(state);
                 b.append("<argument><name>").append(pair[0]).append("</name><direction>")
-                    .append(pair[1]).append("</direction><relatedStateVariable>A_ARG_TYPE_")
-                    .append(pair[0]).append("</relatedStateVariable></argument>");
+                    .append(pair[1]).append("</direction><relatedStateVariable>")
+                    .append(state).append("</relatedStateVariable></argument>");
             }
             b.append("</argumentList></action>");
         }
         b.append("</actionList><serviceStateTable>");
-        for (String name : usedStates) {
-            boolean numeric = name.equals("InstanceID") || name.equals("ConnectionID") ||
-                name.equals("DesiredVolume") || name.equals("CurrentVolume") ||
-                name.equals("CurrentMute") || name.equals("DesiredMute");
-            b.append("<stateVariable sendEvents=\"no\"><name>A_ARG_TYPE_").append(name)
-                .append("</name><dataType>").append(numeric ? "ui4" : "string")
-                .append("</dataType></stateVariable>");
-        }
         if (AV.equals(type) || RC.equals(type)) {
-            b.append("<stateVariable sendEvents=\"yes\"><name>LastChange</name>")
-                .append("<dataType>string</dataType></stateVariable>");
+            usedStates.add("LastChange");
         } else if (CM.equals(type)) {
-            for (String state : new String[] { "SourceProtocolInfo", "SinkProtocolInfo", "CurrentConnectionIDs" }) {
-                b.append("<stateVariable sendEvents=\"yes\"><name>").append(state)
-                    .append("</name><dataType>string</dataType></stateVariable>");
+            usedStates.add("SourceProtocolInfo");
+            usedStates.add("SinkProtocolInfo");
+            usedStates.add("CurrentConnectionIDs");
+        }
+        for (String state : usedStates) {
+            boolean evented = state.equals("LastChange") ||
+                CM.equals(type) && (state.equals("SourceProtocolInfo") ||
+                    state.equals("SinkProtocolInfo") || state.equals("CurrentConnectionIDs"));
+            b.append("<stateVariable sendEvents=\"").append(evented ? "yes" : "no")
+                .append("\"><name>").append(state).append("</name><dataType>")
+                .append(stateType(state)).append("</dataType>");
+            if (state.equals("Volume")) {
+                b.append("<allowedValueRange><minimum>0</minimum><maximum>100</maximum>")
+                    .append("<step>1</step></allowedValueRange>");
+            } else if (state.equals("A_ARG_TYPE_Channel")) {
+                b.append("<allowedValueList><allowedValue>Master</allowedValue></allowedValueList>");
             }
+            b.append("</stateVariable>");
         }
         b.append("</serviceStateTable></scpd>");
         return b.toString();
+    }
+
+    /**
+     * UPnP's relatedStateVariable must be the actual shared state variable, NOT
+     * a synthetic A_ARG_TYPE_<argument> for every input/output. A strict DLNA
+     * controller validates this mapping when reading RenderingControl.xml.
+     */
+    private static String stateForArgument(String service, String arg) {
+        if ("InstanceID".equals(arg)) return "A_ARG_TYPE_InstanceID";
+        if (RC.equals(service)) {
+            if ("Channel".equals(arg)) return "A_ARG_TYPE_Channel";
+            if ("CurrentVolume".equals(arg) || "DesiredVolume".equals(arg)) return "Volume";
+            if ("CurrentMute".equals(arg) || "DesiredMute".equals(arg)) return "Mute";
+        }
+        if (CM.equals(service)) {
+            if ("Source".equals(arg)) return "SourceProtocolInfo";
+            if ("Sink".equals(arg)) return "SinkProtocolInfo";
+            if ("ConnectionIDs".equals(arg)) return "CurrentConnectionIDs";
+        }
+        if (AV.equals(service)) {
+            if ("CurrentURI".equals(arg)) return "AVTransportURI";
+            if ("CurrentURIMetaData".equals(arg)) return "AVTransportURIMetaData";
+            if ("NextURI".equals(arg)) return "NextAVTransportURI";
+            if ("NextURIMetaData".equals(arg)) return "NextAVTransportURIMetaData";
+            if ("Speed".equals(arg) || "CurrentSpeed".equals(arg)) return "TransportPlaySpeed";
+            if ("Unit".equals(arg)) return "A_ARG_TYPE_SeekMode";
+            if ("Target".equals(arg)) return "A_ARG_TYPE_SeekTarget";
+            if ("CurrentTransportState".equals(arg)) return "TransportState";
+            if ("CurrentTransportStatus".equals(arg)) return "TransportStatus";
+            if ("Track".equals(arg)) return "CurrentTrack";
+            if ("TrackDuration".equals(arg)) return "CurrentTrackDuration";
+            if ("TrackMetaData".equals(arg)) return "CurrentTrackMetaData";
+            if ("TrackURI".equals(arg)) return "CurrentTrackURI";
+            if ("RelTime".equals(arg)) return "RelativeTimePosition";
+            if ("AbsTime".equals(arg)) return "AbsoluteTimePosition";
+            if ("RelCount".equals(arg)) return "RelativeCounterPosition";
+            if ("AbsCount".equals(arg)) return "AbsoluteCounterPosition";
+            if ("NrTracks".equals(arg)) return "NumberOfTracks";
+            if ("MediaDuration".equals(arg)) return "CurrentMediaDuration";
+            if ("PlayMedium".equals(arg)) return "PlaybackStorageMedium";
+            if ("RecordMedium".equals(arg)) return "RecordStorageMedium";
+            if ("WriteStatus".equals(arg)) return "RecordMediumWriteStatus";
+            if ("Actions".equals(arg)) return "CurrentTransportActions";
+            if ("PlayMedia".equals(arg)) return "PossiblePlaybackStorageMedia";
+            if ("RecMedia".equals(arg)) return "PossibleRecordStorageMedia";
+            if ("RecQualityModes".equals(arg)) return "PossibleRecordQualityModes";
+            if ("PlayMode".equals(arg)) return "CurrentPlayMode";
+            if ("RecQualityMode".equals(arg)) return "CurrentRecordQualityMode";
+        }
+        return "A_ARG_TYPE_" + arg;
+    }
+
+    private static String stateType(String state) {
+        if ("Volume".equals(state)) return "ui2";
+        if ("Mute".equals(state)) return "boolean";
+        if ("NumberOfTracks".equals(state) || "CurrentTrack".equals(state) ||
+                "A_ARG_TYPE_InstanceID".equals(state) ||
+                "A_ARG_TYPE_AVTransportID".equals(state) ||
+                "A_ARG_TYPE_RcsID".equals(state)) return "ui4";
+        if ("A_ARG_TYPE_ConnectionID".equals(state) ||
+                "A_ARG_TYPE_PeerConnectionID".equals(state) ||
+                state.endsWith("CounterPosition")) return "i4";
+        return "string";
     }
 
     private static String actionArguments(String type, String action) {
@@ -436,6 +533,8 @@ public final class CastService extends Service {
             if ("GetTransportInfo".equals(action)) return "InstanceID:in,CurrentTransportState:out,CurrentTransportStatus:out,CurrentSpeed:out";
             if ("GetPositionInfo".equals(action)) return "InstanceID:in,Track:out,TrackDuration:out,TrackMetaData:out,TrackURI:out,RelTime:out,AbsTime:out,RelCount:out,AbsCount:out";
             if ("GetMediaInfo".equals(action)) return "InstanceID:in,NrTracks:out,MediaDuration:out,CurrentURI:out,CurrentURIMetaData:out,NextURI:out,NextURIMetaData:out,PlayMedium:out,RecordMedium:out,WriteStatus:out";
+            if ("GetDeviceCapabilities".equals(action)) return "InstanceID:in,PlayMedia:out,RecMedia:out,RecQualityModes:out";
+            if ("GetTransportSettings".equals(action)) return "InstanceID:in,PlayMode:out,RecQualityMode:out";
             if ("GetCurrentTransportActions".equals(action)) return "InstanceID:in,Actions:out";
         } else if (CM.equals(type)) {
             if ("GetProtocolInfo".equals(action)) return "Source:out,Sink:out";
@@ -515,6 +614,11 @@ public final class CastService extends Service {
                     "<PlayMedium>NETWORK</PlayMedium><RecordMedium>NOT_IMPLEMENTED</RecordMedium><WriteStatus>NOT_IMPLEMENTED</WriteStatus>";
             } else if ("GetCurrentTransportActions".equals(action)) {
                 args = "<Actions>Play,Pause,Stop,Seek</Actions>";
+            } else if ("GetDeviceCapabilities".equals(action)) {
+                args = "<PlayMedia>NETWORK</PlayMedia><RecMedia>NOT_IMPLEMENTED</RecMedia>" +
+                    "<RecQualityModes>NOT_IMPLEMENTED</RecQualityModes>";
+            } else if ("GetTransportSettings".equals(action)) {
+                args = "<PlayMode>NORMAL</PlayMode><RecQualityMode>NOT_IMPLEMENTED</RecQualityMode>";
             }
         } else if (CM.equals(type)) {
             if ("GetProtocolInfo".equals(action)) {

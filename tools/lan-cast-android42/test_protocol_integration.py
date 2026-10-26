@@ -61,6 +61,14 @@ class LanCastProtocolTest(unittest.TestCase):
         self.assertTrue(url_base.endswith("/"))
         services = root.findall(".//d:service", namespaces=ns)
         self.assertEqual(len(services), 3)
+        service_ids = {
+            s.findtext("d:serviceId", namespaces=ns) for s in services
+        }
+        self.assertEqual(service_ids, {
+            "urn:upnp-org:serviceId:AVTransport",
+            "urn:upnp-org:serviceId:ConnectionManager",
+            "urn:upnp-org:serviceId:RenderingControl",
+        })
         for service in services:
             for tag in ("SCPDURL", "controlURL", "eventSubURL"):
                 relative = service.findtext("d:" + tag, namespaces=ns)
@@ -119,6 +127,67 @@ class LanCastProtocolTest(unittest.TestCase):
             "CALLBACK": "<http://8.8.8.8:9000/unsafe>", "NT": "upnp:event",
         })
         self.assertEqual(status, 412)  # no cross-host callback/SSRF
+
+    def test_scpd_action_variable_mappings_follow_upnp_definitions(self):
+        service_ns = {"s": "urn:schemas-upnp-org:service-1-0"}
+        expected = {
+            "/renderingcontrol.xml": {
+                ("GetVolume", "CurrentVolume"): "Volume",
+                ("SetVolume", "DesiredVolume"): "Volume",
+                ("GetMute", "CurrentMute"): "Mute",
+                ("SetMute", "DesiredMute"): "Mute",
+                ("GetVolume", "Channel"): "A_ARG_TYPE_Channel",
+            },
+            "/avtransport.xml": {
+                ("SetAVTransportURI", "CurrentURI"): "AVTransportURI",
+                ("SetAVTransportURI", "CurrentURIMetaData"): "AVTransportURIMetaData",
+                ("Play", "Speed"): "TransportPlaySpeed",
+                ("GetTransportInfo", "CurrentTransportState"): "TransportState",
+                ("GetPositionInfo", "TrackURI"): "CurrentTrackURI",
+                ("GetPositionInfo", "RelTime"): "RelativeTimePosition",
+                ("GetDeviceCapabilities", "PlayMedia"): "PossiblePlaybackStorageMedia",
+                ("GetTransportSettings", "PlayMode"): "CurrentPlayMode",
+            },
+            "/connectionmanager.xml": {
+                ("GetProtocolInfo", "Source"): "SourceProtocolInfo",
+                ("GetProtocolInfo", "Sink"): "SinkProtocolInfo",
+                ("GetCurrentConnectionIDs", "ConnectionIDs"): "CurrentConnectionIDs",
+            },
+        }
+        for path, mappings in expected.items():
+            with self.subTest(path=path):
+                status, _, raw = self.request("GET", path)
+                self.assertEqual(status, 200)
+                root = ET.fromstring(raw)
+                variables = {}
+                for state in root.findall(".//s:serviceStateTable/s:stateVariable", service_ns):
+                    name = state.findtext("s:name", namespaces=service_ns)
+                    self.assertNotIn(name, variables, "Duplicate variable " + str(name))
+                    variables[name] = state
+                self.assertTrue(variables)
+                actions = {}
+                for action in root.findall(".//s:actionList/s:action", service_ns):
+                    name = action.findtext("s:name", namespaces=service_ns)
+                    for arg in action.findall("s:argumentList/s:argument", service_ns):
+                        arg_name = arg.findtext("s:name", namespaces=service_ns)
+                        state = arg.findtext("s:relatedStateVariable", namespaces=service_ns)
+                        self.assertIn(state, variables, (path, name, arg_name))
+                        actions[(name, arg_name)] = state
+                for key, state in mappings.items():
+                    self.assertEqual(actions.get(key), state, (path, key))
+                if path == "/renderingcontrol.xml":
+                    volume = variables["Volume"]
+                    self.assertEqual(volume.findtext("s:dataType", namespaces=service_ns), "ui2")
+                    self.assertEqual(volume.findtext(".//s:maximum", namespaces=service_ns), "100")
+                    self.assertEqual(variables["Mute"].findtext("s:dataType", namespaces=service_ns),
+                                     "boolean")
+                    channel = variables["A_ARG_TYPE_Channel"]
+                    self.assertEqual(channel.findtext(".//s:allowedValue", namespaces=service_ns),
+                                     "Master")
+                if path == "/connectionmanager.xml":
+                    self.assertEqual(variables["SinkProtocolInfo"].attrib.get("sendEvents"), "yes")
+                else:
+                    self.assertEqual(variables["LastChange"].attrib.get("sendEvents"), "yes")
 
 
 if __name__ == "__main__":

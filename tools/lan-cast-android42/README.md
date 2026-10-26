@@ -41,8 +41,25 @@ v4 修复腾讯发送端请求 `GET //renderingcontrol.xml` 却收到 404 的问
 `STOPPED` 是 AVTransport 的正常空闲状态，不代表接收服务进程已经停止，
 界面现在明确显示「等待投屏（DLNA STOPPED，接收服务仍在线）」。
 
-默认安装包为 `lan-cast-android42-v4.apk`，包名不变，版本号升至 4，
-使用相同签名覆盖安装；原 v1 / v2 / v3 文件请单独保留以便回退。
+v5 进一步核对 UPnP MediaRenderer 规范后，修复了两类服务声明：
+
+- 设备描述中的 `serviceId` 原来是小写路径名，现使用标准的
+  `AVTransport`、`ConnectionManager`、`RenderingControl`。
+- `RenderingControl.xml` 不应把 `CurrentVolume`、`DesiredMute` 等参数
+  单独伪造为 `A_ARG_TYPE_*` 变量；现正确关联到 `Volume`（ui2，0～100）、
+  `Mute`（boolean）、`A_ARG_TYPE_Channel`（Master），也修正 AVTransport /
+  ConnectionManager 状态变量映射，补充实际支持的 `GetDeviceCapabilities`、
+  `GetTransportSettings`。
+- 每次接收服务重新启动会发 `ssdp:byebye`，再重新发布 `ssdp:alive`，
+  促使控制端刷新旧的设备描述缓存（原版本的 SSDP 生存时间为 1800 秒）。
+
+上述错误可能导致严格的 DLNA 发送端只请求 `renderingcontrol.xml` 后就拒绝设备；
+现已通过 ADB 真机的服务描述、状态订阅和 H.264/AAC 播放回归。
+**但尚未获得腾讯视频在 v5 上完成真实投屏的证据**；不能把标准协议检查的通过
+当作腾讯视频 DRM / 平台接收能力已解决。
+
+默认安装包为 `lan-cast-android42-v5.apk`，包名不变，版本号升至 5，
+使用相同签名覆盖安装；原 v1 / v2 / v3 / v4 文件请单独保留以便回退。
 
 可在已经启动的测试接收器上执行专用协议测试（测试会短暂改变接收器播放状态）：
 
