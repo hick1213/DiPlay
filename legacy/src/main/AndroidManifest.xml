@@ -27,7 +27,7 @@
         android:name="com.shilapi.xcertplay.legacy.LegacyApplication"
         android:allowBackup="false"
         android:icon="@drawable/legacy_launcher_icon"
-        android:label="DiPlay (Android 4.2)"
+        android:label="${diplayAppLabel}"
         android:theme="@android:style/Theme.Holo.NoActionBar"
         android:usesCleartextTraffic="true">
 

@@ -60,6 +60,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     private lateinit var controls: LinearLayout
     private var renderer: LegacyMediaSink? = null
     private var controller: CarPlayController? = null
+    private var mockSession: EmulatorMockConnectScenario? = null
+    private var mockStressTask: Runnable? = null
     // CarPlayController.close() releases Wi-Fi Direct on a worker thread. Starting a
     // new controller before that worker finishes can close the *new* P2P group when
     // Android processes the previous WifiP2pManager.Channel's binder teardown.
@@ -93,11 +95,15 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         }.getOrDefault(WirelessHotspotMode.WIFI_P2P)
         if (mode == WirelessHotspotMode.LOCAL_ONLY_HOTSPOT) mode = WirelessHotspotMode.WIFI_P2P
         buildUi()
-        val mfiCheck = runCatching { state.ensureLocalAuthentication() }
-        val mfiSummary = mfiCheck.fold(
-            onSuccess = { directory -> "MFi 自检通过（${directory.name}）" },
-            onFailure = { error -> "MFi 自检失败：${error.message ?: error.javaClass.simpleName}" },
-        )
+        val mfiSummary = if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+            "模拟器专用：蓝牙 / Wi-Fi / MFi / iPhone 均为 MOCK，不包含任何身份文件"
+        } else {
+            val mfiCheck = runCatching { state.ensureLocalAuthentication() }
+            mfiCheck.fold(
+                onSuccess = { directory -> "MFi 自检通过（${directory.name}）" },
+                onFailure = { error -> "MFi 自检失败：${error.message ?: error.javaClass.simpleName}" },
+            )
+        }
         Log.i(TAG, "MFi preflight build=$BUILD_LABEL result=$mfiSummary")
         intro.append("\n\n$BUILD_LABEL · $mfiSummary")
         updateStatus("$BUILD_LABEL · ${modeLabel(mode)} · $mfiSummary")
@@ -118,8 +124,12 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
             text = "连接"
             setOnClickListener {
                 HeadUnitDiagnostics.event("BUTTON",
-                    if (controller == null) "Connect pressed" else "Disconnect pressed")
-                if (controller == null) startConnection() else disconnect()
+                    if (controller == null && mockSession == null) "Connect pressed" else "Disconnect pressed")
+                if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+                    if (mockSession == null) startConnection() else disconnect()
+                } else {
+                    if (controller == null) startConnection() else disconnect()
+                }
             }
         }
         modeButton = Button(this).apply {
@@ -128,6 +138,10 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         setupButton = Button(this).apply {
             text = "网络参数"
             setOnClickListener {
+                if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+                    updateStatus("MOCK：无线网络已模拟，未打开车机网络设置")
+                    return@setOnClickListener
+                }
                 if (mode == WirelessHotspotMode.WIFI_P2P) {
                     startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
                 } else {
@@ -141,12 +155,21 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         }
         updateModeButton()
         val phoneButton = Button(this).apply {
-            text = "选择手机"
-            setOnClickListener { chooseIphone { } }
+            text = if (BuildConfig.EMULATOR_MOCK_CONNECT) "6轮连接测试" else "选择手机"
+            setOnClickListener {
+                if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+                    runMockStress()
+                } else chooseIphone { }
+            }
         }
         val siriButton = Button(this).apply {
             text = "Siri"
-            setOnClickListener { controller?.requestSiri() }
+            setOnClickListener {
+                if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+                    HeadUnitDiagnostics.event("MOCK_SIRI", "Siri control event mocked")
+                    updateStatus("MOCK：模拟 Siri 指令，不访问 iPhone")
+                } else controller?.requestSiri()
+            }
         }
         controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -161,7 +184,9 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
             addView(connectButton)
         }
         intro = TextView(this).apply {
-            text = "DiPlay  ·  无线 CarPlay\n\n" +
+            text = (if (BuildConfig.EMULATOR_MOCK_CONNECT)
+                "!!! API17 EMULATOR MOCK ONLY !!!\nBluetooth / Wi-Fi / MFi / iPhone 都已模拟\n\n"
+                else "DiPlay  ·  无线 CarPlay\n\n") +
                 "1. 打开车机 Wi-Fi 和蓝牙，并与 iPhone 完成蓝牙配对\n" +
                 "2. 选择无线网络方式和要连接的 iPhone\n" +
                 "3. 点击「连接」；配对后从 iPhone 同意使用 CarPlay\n" +
@@ -210,6 +235,10 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     private fun chooseMode() {
+        if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+            updateStatus("MOCK：已跳过全部无线连接，勿在真实车机使用")
+            return
+        }
         if (controller != null) {
             updateStatus("请先断开，再切换无线网络方式")
             return
@@ -325,6 +354,10 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     private fun startConnection() {
+        if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+            connectEmulatorMock()
+            return
+        }
         HeadUnitDiagnostics.event("CONNECT_CHECK", "startConnection mode=" + mode.name +
             " API=" + Build.VERSION.SDK_INT)
         if (disconnecting) {
@@ -357,6 +390,122 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
             }
         }
         connect()
+    }
+
+    /**
+     * A dedicated, separately packaged ARM32 emulator APK. Exercise the
+     * connection's real UI, Surface and H264 renderer after replacing ALL
+     * external CarPlay peripherals and protocol sessions with local signals.
+     */
+    private fun connectEmulatorMock() {
+        if (!BuildConfig.EMULATOR_MOCK_CONNECT || mockSession != null) return
+        if (!EmulatorMockConnectScenario.isSafeEmulator()) {
+            HeadUnitDiagnostics.flagIncident("MOCK_DENIED: device is not an Android emulator")
+            updateStatus("拒绝运行 MOCK：当前不是通用 Android 模拟器")
+            return
+        }
+        HeadUnitDiagnostics.connectPending("MOCK_CONNECT_BEGIN Android API=" + Build.VERSION.SDK_INT)
+        HeadUnitDiagnostics.event("MOCK_EXTERNAL_BYPASS",
+            "No Bluetooth, Wi-Fi Direct, iPhone, MFi assets, iAP2 or real CarPlayController")
+        try {
+            val sink = LegacyMediaSink(this, 320, 180, ::report)
+            renderer = sink
+            if (video.holder.surface.isValid) sink.setSurface(video.holder.surface)
+            val mock = EmulatorMockConnectScenario(
+                context = this,
+                sink = sink,
+                onState = { status -> onConnectionStatus(status) },
+                onSessionActive = {
+                    HeadUnitDiagnostics.connectFinished("MOCK AirPlay session active")
+                    showSessionActive(mock = true)
+                },
+                onFirstFrame = {
+                    HeadUnitDiagnostics.event("MOCK_FIRST_FRAME",
+                        "Actual API17 MediaCodec produced the first rendered H264 frame")
+                    showFirstVideoFrame(mock = true)
+                },
+                onFailed = { error ->
+                    runOnUiThread {
+                        HeadUnitDiagnostics.flagIncident(
+                            "MOCK_CONNECT_FAILED type=" + error.javaClass.simpleName)
+                        disconnect()
+                        updateStatus("模拟连接失败：" + error.javaClass.simpleName)
+                    }
+                },
+            )
+            mockSession = mock
+            connectButton.text = "断开 MOCK"
+            mock.start()
+        } catch (error: Throwable) {
+            HeadUnitDiagnostics.recordException("MOCK connection setup", error)
+            disconnect()
+            updateStatus("MOCK 建立失败：" + error.javaClass.simpleName)
+        }
+    }
+
+    /** Repeatable on-device stress test with no ADB UI timing assumptions. */
+    private fun runMockStress() {
+        if (!BuildConfig.EMULATOR_MOCK_CONNECT || mockStressTask != null) return
+        if (!EmulatorMockConnectScenario.isSafeEmulator()) {
+            updateStatus("Mock 连续测试被拒绝：不是 Android 模拟器")
+            return
+        }
+        val task = object : Runnable {
+            var round = 0
+            var connecting = true
+            override fun run() {
+                if (isFinishing || isDestroyed) {
+                    mockStressTask = null
+                    return
+                }
+                if (connecting) {
+                    if (round == 6) {
+                        HeadUnitDiagnostics.event("MOCK_STRESS_COMPLETE",
+                            "Completed 6 connect-disconnect rounds without fatal Java crash")
+                        mockStressTask = null
+                        updateStatus("MOCK 连续 6 轮连接/断开已完成；请检查是否记录了 6 次首帧")
+                        return
+                    }
+                    round++
+                    HeadUnitDiagnostics.event("MOCK_STRESS_START", "round=" + round)
+                    if (mockSession != null) disconnect()
+                    startConnection()
+                    connecting = false
+                    uiHandler.postDelayed(this, 7_500L)
+                } else {
+                    HeadUnitDiagnostics.event("MOCK_STRESS_STOP", "round=" + round)
+                    disconnect()
+                    connecting = true
+                    uiHandler.postDelayed(this, 1_000L)
+                }
+            }
+        }
+        mockStressTask = task
+        task.run()
+    }
+
+    private fun showSessionActive(mock: Boolean) {
+        active = true
+        runOnUiThread {
+            firstVideoFrame = false
+            iphoneAudioStatus = if (mock) "模拟：无真实 iPhone 音轨" else "CarPlay 已连接；等待 iPhone 建立音频流"
+            androidAudioStatus = if (mock) "模拟：绕过无设备的音频 HAL" else "尚未启动 Android 音频播放"
+            mainAudioOwnerStatus = if (mock) "MOCK iPhone" else "未知；等待 iPhone 资源通知"
+            microphoneStatus = if (mock) "MOCK 无真实麦克风" else "等待 iPhone 的麦克风输入请求"
+            intro.visibility = View.GONE
+            showControlsTemporarily()
+        }
+        updateStatus(if (mock) "MOCK 会话已连接，开始真实 MediaCodec H264 解码" else "CarPlay 已连接")
+    }
+
+    private fun showFirstVideoFrame(mock: Boolean) {
+        runOnUiThread {
+            if (active && !firstVideoFrame) {
+                firstVideoFrame = true
+                updateStatus(if (mock) "MOCK 首帧已渲染（真实 API17 H264 解码器）" else "CarPlay 画面已显示")
+                showControlsTemporarily(FIRST_FRAME_CONTROLS_MILLIS)
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -451,27 +600,11 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
                     override fun onSessionActive(session: AirPlaySession) {
                         HeadUnitDiagnostics.connectFinished("AirPlay session active")
                         HeadUnitUploadService.cancel(this@LegacyCarPlayActivity)
-                        active = true
-                        runOnUiThread {
-                            firstVideoFrame = false
-                            iphoneAudioStatus = "CarPlay 已连接；等待 iPhone 建立音频流"
-                            androidAudioStatus = "尚未启动 Android 音频播放"
-                            mainAudioOwnerStatus = "未知；等待 iPhone 资源通知"
-                            microphoneStatus = "等待 iPhone 的麦克风输入请求"
-                            intro.visibility = View.GONE
-                            showControlsTemporarily()
-                        }
-                        updateStatus("CarPlay 已连接")
+                        showSessionActive(mock = false)
                     }
 
                     override fun onVideoFrameRendered(session: AirPlaySession) {
-                        runOnUiThread {
-                            if (active && !firstVideoFrame) {
-                                firstVideoFrame = true
-                                updateStatus("CarPlay 画面已显示")
-                                showControlsTemporarily(FIRST_FRAME_CONTROLS_MILLIS)
-                            }
-                        }
+                        showFirstVideoFrame(mock = false)
                     }
 
                     override fun onSessionEnded(session: AirPlaySession) {
@@ -576,7 +709,9 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
     }
 
     private fun updateStatus(value: String) {
-        runOnUiThread { status.text = value }
+        runOnUiThread {
+            status.text = if (BuildConfig.EMULATOR_MOCK_CONNECT) "MOCK · " + value else value
+        }
     }
 
     private fun report(value: String) {
@@ -649,7 +784,10 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         uiHandler.removeCallbacks(hideControls)
         if (active && firstVideoFrame && ::controls.isInitialized &&
             controls.visibility == View.VISIBLE && !toolbarTouchInProgress && hasWindowFocus()) {
-            uiHandler.postDelayed(hideControls, delayMillis)
+            // Keep the toolbar reachable while running the *simulator-only*
+            // repeated-click test; the car release retains the 3-second timer.
+            uiHandler.postDelayed(hideControls,
+                if (BuildConfig.EMULATOR_MOCK_CONNECT) 60_000L else delayMillis)
         }
     }
 
@@ -709,6 +847,25 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
         HeadUnitDiagnostics.connectFinished("connection canceled/disconnected")
         HeadUnitUploadService.cancel(this)
         uiHandler.removeCallbacks(hideControls)
+        if (BuildConfig.EMULATOR_MOCK_CONNECT) {
+            val previous = mockSession
+            mockSession = null
+            previous?.close()
+            renderer?.close()
+            renderer = null
+            active = false
+            firstVideoFrame = false
+            controls.visibility = View.VISIBLE
+            intro.visibility = View.VISIBLE
+            connectButton.text = "连接"
+            connectButton.isEnabled = true
+            disconnecting = false
+            if (previous != null) {
+                HeadUnitDiagnostics.event("MOCK_RESET", "Mock session disconnected safely")
+                updateStatus("MOCK 已断开；所有模拟资源已释放，可重复连接")
+            }
+            return
+        }
         val oldController = controller
         controller = null
         renderer?.close()
@@ -785,6 +942,8 @@ class LegacyCarPlayActivity : Activity(), SurfaceHolder.Callback, View.OnTouchLi
 
     override fun onDestroy() {
         HeadUnitDiagnostics.event("UI_DESTROY", "CarPlay Activity destroyed")
+        mockStressTask?.let { uiHandler.removeCallbacks(it) }
+        mockStressTask = null
         uiHandler.removeCallbacks(hideControls)
         disconnect()
         super.onDestroy()

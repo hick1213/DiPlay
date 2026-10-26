@@ -6,10 +6,29 @@ plugins {
 // Do not lower :mobile's minSdk or package current AndroidX UI components here.
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
+// Simulator-only APK: no actual Bluetooth, Wi-Fi Direct, MFi, or iPhone handshake.
+// Always use a separate Android applicationId; never overwrite the head-unit build.
+val emulatorMockConnect = providers.gradleProperty("diplayEmulatorMockConnect")
+    .map { it.equals("true", ignoreCase = true) }.orElse(false).get()
+val emulatorMockClipDir = providers.gradleProperty("diplayMockClipDir")
+    .orNull?.let { file(it).canonicalFile }
+if (emulatorMockConnect) {
+    require(localAuthenticationAssets == null) {
+        "Never supply MFi identity assets to the simulator-only Mock APK"
+    }
+    require(emulatorMockClipDir != null &&
+        emulatorMockClipDir.resolve("emulator-mock/sample.h264").isFile) {
+        "Set -PdiplayMockClipDir to a directory containing emulator-mock/sample.h264"
+    }
+}
 // Some Android 4.2 head units can install only through their vendor's app market.
 // Keep the default identity unless the owner has identified a safe, replaceable package.
-val legacyApplicationId = providers.gradleProperty("diplayLegacyApplicationId")
-    .orElse("com.shihab.diplay.legacy").get()
+val legacyApplicationId = if (emulatorMockConnect) {
+    "com.hick.diplay.simulator.mock"
+} else {
+    providers.gradleProperty("diplayLegacyApplicationId")
+        .orElse("com.shihab.diplay.legacy").get()
+}
 require(Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
     .matches(legacyApplicationId)) { "Invalid -PdiplayLegacyApplicationId: $legacyApplicationId" }
 
@@ -21,9 +40,16 @@ android {
         applicationId = legacyApplicationId
         minSdk = 17
         targetSdk = 28
-        versionCode = 13
-        versionName = "0.2.32-android42-auto-diagnostic-v13"
+        versionCode = if (emulatorMockConnect) 90013 else 13
+        versionName = if (emulatorMockConnect) "0.2.32-api17-emulator-MOCK" else
+            "0.2.32-android42-auto-diagnostic-v13"
         multiDexEnabled = true
+        buildConfigField("boolean", "EMULATOR_MOCK_CONNECT", emulatorMockConnect.toString())
+        manifestPlaceholders["diplayAppLabel"] = if (emulatorMockConnect)
+            "DiPlay 模拟器 MOCK" else "DiPlay (Android 4.2)"
+    }
+    buildFeatures {
+        buildConfig = true
     }
 
     lint {
@@ -33,6 +59,9 @@ android {
     }
 
     localAuthenticationAssets?.let { sourceSets.getByName("main").assets.srcDir(it) }
+    if (emulatorMockConnect) {
+        sourceSets.getByName("main").assets.srcDir(checkNotNull(emulatorMockClipDir))
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
