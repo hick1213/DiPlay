@@ -58,8 +58,19 @@ v5 进一步核对 UPnP MediaRenderer 规范后，修复了两类服务声明：
 **但尚未获得腾讯视频在 v5 上完成真实投屏的证据**；不能把标准协议检查的通过
 当作腾讯视频 DRM / 平台接收能力已解决。
 
-默认安装包为 `lan-cast-android42-v5.apk`，包名不变，版本号升至 5，
-使用相同签名覆盖安装；原 v1 / v2 / v3 / v4 文件请单独保留以便回退。
+v6 新增无 ADB 的故障日志收集。主界面新增
+`立即上传诊断日志（不需要检测到异常）` 按钮；播放界面新增
+`报告黑屏 / 立即上传`。两者不依赖异常检测，可在关闭自动上报时手动使用。
+车机会在局域网使用 UDP 18817 自动查找 Mac 的当前 IP，
+然后向 HTTP 18816 的 `/api/diagnostic-dump` 发送脱敏日志 ZIP。
+原来检测到播放器错误、首帧超时也会自动触发上报。
+应用数据目录中保存少量最近的阶段日志、异常堆栈及最后一个连接检查点，
+不依赖系统 logcat；原生崩溃只能保证最后一个落盘检查点。
+自动上报有可见开关，关闭后不影响手动上报。若网络隔离或 Mac 不在线，
+错误日志在本地保留；请在同一可信 Wi-Fi 上测试。
+
+默认安装包为 `lan-cast-android42-v6.apk`，包名不变，版本号升至 6，
+可用相同签名覆盖安装历史版本，最新版目录不再保留旧 APK。
 
 可在已经启动的测试接收器上执行专用协议测试（测试会短暂改变接收器播放状态）：
 
@@ -78,7 +89,7 @@ mkdir -p /private/tmp/lancast-candidate
 sh tools/lan-cast-android42/build.sh /private/tmp/lancast-candidate
 ```
 
-正式最新版 APK 只在 `car-market-kit/APKs/lan-cast-android42-v5.apk`。
+正式最新版 APK 只在 `car-market-kit/APKs/lan-cast-android42-v6.apk`。
 默认构建输出位置也指向这个目录，但**不会覆盖**现有 APK；新版本需完成测试后再切换发布。
 旧版本 APK 均已从 Mac 和历史外部构建目录删除；原始 TVBox 上游构建输入
 单独归档至 `car-market-kit/dumps/tvbox-build-inputs-20261025.zip`，不作为安装包提供。

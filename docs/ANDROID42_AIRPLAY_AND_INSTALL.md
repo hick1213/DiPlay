@@ -4,6 +4,12 @@
 
 ## 1. AirPlay 与当前 LAN Cast
 
+**2026-10-26 更新：** LAN Cast v6 新增主界面「立即上传诊断日志」
+和播放界面「报告黑屏 / 立即上传」，通过 UDP 18817 动态发现 Mac
+的当前 IP，然后向 HTTP 18816 的 `/api/diagnostic-dump` 提交
+脱敏日志 ZIP，不需要车机 ADB 或手动输入 IP。默认自动上报可在
+独立日志界面关闭。此功能不代表已支持 AirPlay。
+
 - 当前 `tools/lan-cast-android42` 是 DLNA/UPnP MediaRenderer，不是 AirPlay 接收器。
 - iPhone AirPlay「屏幕镜像」（视频 H.264/音频）与 App 的 AirPlay 视频投放/HLS、AirPlay 音乐是不同流与控制流程；不能只加一条 mDNS 宣告就称为支持。
 - 评估上游：<https://github.com/jqssun/android-airplay-server>（基于 UxPlay、JNI、MediaCodec/SurfaceView，**最低 Android 7.0**）及 <https://github.com/FDH2/UxPlay>（GPLv3、Unix/GStreamer）。未经 API 17 移植验证，不能把上游 APK 改 `minSdk` 后直接安装。

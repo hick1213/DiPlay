@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.uu.uunavi" android:versionCode="5" android:versionName="1.4-upnp-scpd">
+    package="com.uu.uunavi" android:versionCode="6" android:versionName="1.5-auto-diagnostics">
     <uses-sdk android:minSdkVersion="17" android:targetSdkVersion="17" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -8,7 +8,8 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <application android:label="车机局域网投屏" android:theme="@android:style/Theme.Holo.Light.NoActionBar"
+    <application android:name="com.shilapi.xcertplay.diagnostic.HeadUnitLogApplication"
+        android:label="车机局域网投屏" android:theme="@android:style/Theme.Holo.Light.NoActionBar"
         android:hardwareAccelerated="true" android:allowBackup="false">
         <activity android:name="com.hick.lancast.LanCastActivity"
             android:screenOrientation="landscape" android:exported="true">
@@ -19,6 +20,16 @@
         </activity>
         <activity android:name="com.hick.lancast.CastPlayerActivity"
             android:screenOrientation="landscape" android:exported="false" />
+        <activity android:name="com.shilapi.xcertplay.diagnostic.HeadUnitLogActivity"
+            android:label="投屏故障日志" android:screenOrientation="landscape"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service android:name="com.shilapi.xcertplay.diagnostic.HeadUnitUploadService"
+            android:process=":log_reporter" android:exported="false" />
         <service android:name="com.hick.lancast.CastService" android:exported="false" />
     </application>
 </manifest>

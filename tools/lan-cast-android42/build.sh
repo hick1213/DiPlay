@@ -7,8 +7,15 @@ output_dir=${1:-"$source_dir/../../car-market-kit/APKs"}
 sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$sdk_dir/build-tools/35.0.0"
 android_jar="$sdk_dir/platforms/android-21/android.jar"
+if [ ! -f "$android_jar" ]; then
+    # The older SDK platform may live on a detachable external disk. The API34
+    # compile-only jar is safe here because the APK still targets API17 and
+    # runtime methods are guarded; never silently drop minSdkVersion.
+    android_jar="$sdk_dir/platforms/android-34/android.jar"
+fi
+[ -f "$android_jar" ] || { echo "Missing Android platform jar" >&2; exit 1; }
 keystore="$HOME/.android/debug.keystore"
-output_apk="$output_dir/lan-cast-android42-v5.apk"
+output_apk="$output_dir/lan-cast-android42-v6.apk"
 
 if [ -e "$output_apk" ]; then
     echo "Preserving existing APK, refusing to overwrite: $output_apk" >&2
@@ -31,10 +38,15 @@ javac -source 7 -target 7 -cp "$android_jar" -d "$build_dir/classes" \
     "$source_dir/src/com/hick/lancast/LanCastActivity.java" \
     "$source_dir/src/com/hick/lancast/CastPlayerActivity.java" \
     "$source_dir/src/com/hick/lancast/CastService.java" \
-    "$source_dir/src/com/hick/lancast/LanCastEventing.java"
+    "$source_dir/src/com/hick/lancast/LanCastEventing.java" \
+    "$source_dir/../../shared/src/main/java/com/shilapi/xcertplay/diagnostic/HeadUnitDiagnostics.java" \
+    "$source_dir/../../shared/src/main/java/com/shilapi/xcertplay/diagnostic/HeadUnitLogActivity.java" \
+    "$source_dir/../../shared/src/main/java/com/shilapi/xcertplay/diagnostic/HeadUnitLogApplication.java" \
+    "$source_dir/../../shared/src/main/java/com/shilapi/xcertplay/diagnostic/HeadUnitAutoUploader.java" \
+    "$source_dir/../../shared/src/main/java/com/shilapi/xcertplay/diagnostic/HeadUnitUploadService.java"
 
 "$build_tools/d8" --min-api 17 --lib "$android_jar" --output "$build_dir/dex" \
-    "$build_dir"/classes/com/hick/lancast/*.class
+    $(find "$build_dir/classes" -type f -name '*.class')
 "$build_tools/aapt2" link -o "$build_dir/manifest.apk" \
     --manifest "$source_dir/AndroidManifest.xml" -I "$android_jar" \
     --min-sdk-version 17 --target-sdk-version 17

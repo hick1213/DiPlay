@@ -15,7 +15,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import signal
+import secrets
 import socket
+import socketserver
 import subprocess
 import threading
 from urllib.parse import urlsplit
@@ -29,12 +31,15 @@ else:
 
 
 LOG = logging.getLogger("car-market-hook")
+DISCOVERY_QUERY = b"DIPLAY_HEADUNIT_LOG_DISCOVER_V1"
+DISCOVERY_RESPONSE = b"DIPLAY_HEADUNIT_LOG_RECEIVER_V1"
+DEFAULT_DISCOVERY_PORT = 18817
 DEFAULT_APK = Path("/Users/hick/github/DiPlay/car-market-kit/APKs/tvbox-android42-full-native-v5.apk")
 DEFAULT_DIAGNOSTIC_APK = Path(
     "/Users/hick/github/DiPlay/car-market-kit/APKs/car-probe-whitelist-title-navi-v11.apk"
 )
 DEFAULT_LAN_CAST_APK = Path(
-    "/Users/hick/github/DiPlay/car-market-kit/APKs/lan-cast-android42-v5.apk"
+    "/Users/hick/github/DiPlay/car-market-kit/APKs/lan-cast-android42-v6.apk"
 )
 DEFAULT_LOG_DIR = Path("/Users/hick/github/DiPlay/car-market-kit/logs")
 
@@ -67,24 +72,54 @@ def validated_lan(address):
     return str(ip)
 
 
+class DiagnosticDiscovery(socketserver.BaseRequestHandler):
+    """Reply-only UDP LAN discovery; never transport credentials in discovery."""
+
+    def handle(self):
+        payload, responder = self.request
+        if not payload.startswith(DISCOVERY_QUERY + b":"):
+            return
+        nonce = payload[len(DISCOVERY_QUERY) + 1:]
+        if len(nonce) != 16 or any(char not in b"0123456789abcdef" for char in nonce):
+            return
+        peer = ipaddress.ip_address(self.client_address[0])
+        server = self.server
+        allowed = (self.client_address[0] in server.allowed_clients or
+                   any(peer in subnet for subnet in server.allowed_subnets) or
+                   (getattr(server, "live_lan_check", None) is not None and
+                    server.live_lan_check(peer)))
+        if allowed:
+            responder.sendto(DISCOVERY_RESPONSE + b":" + nonce, self.client_address)
+
+
+class ThreadingDiscovery(socketserver.ThreadingMixIn, socketserver.UDPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 class HookServerBundle:
     """Three independently testable listeners sharing one original-APK catalog."""
 
     def __init__(self, catalog, bind, http_port, tcp_port, proxy_port,
                  allowed_clients, allowed_subnets=(), diagnostic_apk=None,
-                 additional_apks=None, dump_dir=None):
-        self.http = self.tcp = self.proxy = None
+                 additional_apks=None, dump_dir=None, discovery_port=0,
+                 live_lan_check=None):
+        self.http = self.tcp = self.proxy = self.discovery = None
         self.workers = []
         try:
             self.http = ThreadingHTTPServer((bind, http_port), MarketHTTP)
             self.tcp = ThreadingTCP((bind, tcp_port), MarketTCP)
             self.proxy = ThreadingProxy((bind, proxy_port), CarProxyHandler)
+            self.discovery = ThreadingDiscovery((bind, discovery_port), DiagnosticDiscovery)
             catalog.http_port = self.http.server_port
             catalog.tcp_port = self.tcp.server_address[1]
             self.http.catalog = self.tcp.catalog = catalog
             self.http.dump_store = DiagnosticDumpStore(dump_dir) if dump_dir else None
             self.http.dump_clients = set(allowed_clients) | {catalog.host, "127.0.0.1"}
             self.http.dump_subnets = tuple(allowed_subnets)
+            self.discovery.allowed_clients = self.http.dump_clients
+            self.discovery.allowed_subnets = self.http.dump_subnets
+            self.discovery.live_lan_check = self.http.live_lan_check = live_lan_check
             if diagnostic_apk is not None:
                 diagnostic_apk = Path(diagnostic_apk).resolve(strict=True)
                 if (not diagnostic_apk.is_file() or diagnostic_apk.suffix.lower() != ".apk"
@@ -114,13 +149,13 @@ class HookServerBundle:
                 self.proxy.server_address[1])
 
     def start(self):
-        for server in (self.http, self.tcp, self.proxy):
+        for server in (self.http, self.tcp, self.proxy, self.discovery):
             worker = threading.Thread(target=server.serve_forever, daemon=True)
             worker.start()
             self.workers.append(worker)
 
     def close(self, started=True):
-        for server in (self.http, self.tcp, self.proxy):
+        for server in (self.http, self.tcp, self.proxy, self.discovery):
             if server is not None:
                 if started:
                     server.shutdown()
@@ -197,6 +232,18 @@ def check_servers(address, http_port, tcp_port, proxy_port, diagnostic=False,
     return len(apps["item_apps"])
 
 
+def check_discovery(address, udp_port):
+    """Verify a head unit can discover the Mac's current IPv4 without hardcoding it."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.settimeout(3)
+        nonce = secrets.token_hex(8).encode("ascii")
+        probe.sendto(DISCOVERY_QUERY + b":" + nonce, (address, udp_port))
+        payload, sender = probe.recvfrom(256)
+        assert payload == DISCOVERY_RESPONSE + b":" + nonce, "unexpected UDP diagnostic discovery response"
+        assert sender[0] == address, "discovery answered from another host"
+    return True
+
+
 def check_exact_apk(address, port, route, expected_path):
     """Detect a stale service still serving an older APK at a stable download URL."""
     expected = hashlib.sha256()
@@ -238,6 +285,8 @@ def display_setup(address, http_port, tcp_port, proxy_port, network=None, mfi_te
     print("  诊断 v11：http://{}:{}/car-probe-settings.apk".format(address, http_port))
     print("  Root / 安装限制 Dump 上传：在 v11 填 Mac IP {}，无需验证码，手动点击确认。".format(address))
     print("  ZIP 保存到 car-market-kit/dumps；只在可信隔离 Wi-Fi 中运行接收服务。")
+    print("  自动诊断发现（UDP）：{}；车机自动识别当前 Mac IP，无需填写固定地址。".format(
+        DEFAULT_DISCOVERY_PORT))
     if mfi_test:
         print("  DiPlay Android Back 自动隐藏 + 语音诊断 v12：http://{}:{}/diplay-android42-toolbar-voice-v12.apk".format(address, http_port))
     print("  局域网投屏：http://{}:{}/lan-cast-android42.apk".format(address, http_port))
@@ -276,6 +325,8 @@ def main(argv=None):
     parser.add_argument("--http-port", type=int, default=18816)
     parser.add_argument("--market-port", type=int, default=18611)
     parser.add_argument("--proxy-port", type=int, default=18081)
+    parser.add_argument("--discovery-port", type=int, default=DEFAULT_DISCOVERY_PORT,
+                        help="head-unit diagnostic UDP discovery; default 18817")
     parser.add_argument("--allow-client", action="append", default=[])
     parser.add_argument("--trusted-lan", action="store_true",
                         help="allow the directly attached private LAN subnet to use the HTTP proxy")
@@ -303,10 +354,12 @@ def main(argv=None):
         bind = str(ipaddress.IPv4Address(args.bind))
         if bind != "0.0.0.0" and bind != address:
             raise ValueError("--bind 只允许 0.0.0.0 或当前 --lan-ip")
-        if len(set((args.http_port, args.market_port, args.proxy_port))) != 3:
+        if len(set((args.http_port, args.market_port, args.proxy_port,
+                    args.discovery_port))) != 4:
             raise ValueError("HTTP、市场 TCP、代理必须使用三个不同端口")
         if any(not 1 <= port <= 65535 for port in
-               (args.http_port, args.market_port, args.proxy_port)):
+               (args.http_port, args.market_port, args.proxy_port,
+                args.discovery_port)):
             raise ValueError("端口必须在 1～65535 之间")
         subnets = [ipaddress.ip_network(item, strict=False) for item in args.allow_subnet]
         if args.trusted_lan:
@@ -327,6 +380,7 @@ def main(argv=None):
                                      ("/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk),
                                      ("/lan-cast-android42.apk", args.lan_cast_apk),
                                  ) if path is not None and path.is_file()))
+            check_discovery(address, args.discovery_port)
             if args.mfi_test_apk is not None:
                 check_exact_apk(address, args.http_port,
                                 "/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk)
@@ -352,7 +406,7 @@ def main(argv=None):
         additional_apks = {
             "/lan-cast-android42.apk": (
                 args.lan_cast_apk,
-                "下载车机局域网投屏 LAN Cast v5（DLNA 服务声明兼容性）"),
+                "下载车机局域网投屏 LAN Cast v6（黑屏诊断 + 手动/自动上传日志）"),
         }
         if args.mfi_test_apk is not None:
             mfi_label = "下载 DiPlay Android 4.2 v12（顶部操作栏 3 秒自动隐藏，语音诊断）"
@@ -363,7 +417,12 @@ def main(argv=None):
                                   args.proxy_port, args.allow_client, subnets,
                                   diagnostic_apk=args.diagnostic_apk,
                                   dump_dir=args.dump_dir or args.log_dir.parent / "dumps",
-                                  additional_apks=additional_apks)
+                                  additional_apks=additional_apks,
+                                  discovery_port=args.discovery_port,
+                                  live_lan_check=(
+                                      lambda peer: peer in trusted_network(
+                                          detect_lan(args.interface), args.interface)
+                                      if args.trusted_lan else None))
     except (OSError, ValueError) as exc:
         parser.error("无法启动市场服务：{}（如端口已使用，先运行 check）".format(exc))
     stop = threading.Event()
@@ -381,6 +440,7 @@ def main(argv=None):
             LOG.warning("代理开放至信任网段 %s", ", ".join(map(str, subnets)))
         rows = check_servers(address, *bundle.ports, diagnostic=True,
                              additional_routes=("/tvbox-android42.apk",) + tuple(additional_apks))
+        check_discovery(address, bundle.discovery.server_address[1])
         if args.mfi_test_apk is not None:
             check_exact_apk(address, bundle.ports[0],
                             "/diplay-android42-toolbar-voice-v12.apk", args.mfi_test_apk)
@@ -389,8 +449,36 @@ def main(argv=None):
                       ", ".join(map(str, subnets)) if subnets else None,
                       mfi_test=args.mfi_test_apk is not None)
         open_demo()
-        while not stop.wait(1):
-            pass
+        # Keep the same listening sockets when a Mac changes Wi-Fi or hotspot.
+        # Both marketplace discovery and diagnostic uploads must advertise the
+        # Mac's *current* address; a listener bound to 0.0.0.0 remains alive.
+        while not stop.wait(5):
+            if args.lan_ip != "auto":
+                continue
+            try:
+                latest = validated_lan(detect_lan(args.interface))
+            except (OSError, ValueError):
+                continue
+            if latest == catalog.host:
+                continue
+            previous = catalog.host
+            catalog.host = latest
+            if previous not in args.allow_client:
+                bundle.http.dump_clients.discard(previous)
+                bundle.discovery.allowed_clients.discard(previous)
+                bundle.proxy.allowed_clients.discard(previous)
+            bundle.http.dump_clients.add(latest)
+            bundle.discovery.allowed_clients.add(latest)
+            bundle.proxy.market_override = "{}:{}".format(latest, bundle.ports[1])
+            bundle.proxy.allowed_clients.add(latest)
+            if args.trusted_lan:
+                current_subnet = trusted_network(latest, args.interface)
+                new_subnets = tuple([current_subnet] +
+                    [ipaddress.ip_network(item, strict=False) for item in args.allow_subnet])
+                bundle.http.dump_subnets = new_subnets
+                bundle.discovery.allowed_subnets = new_subnets
+                bundle.proxy.allowed_subnets = list(new_subnets)
+            LOG.info("LAN_IP_CHANGED previous=%s current=%s discovery/market updated", previous, latest)
         return 0
     finally:
         signal.signal(signal.SIGTERM, previous_term)

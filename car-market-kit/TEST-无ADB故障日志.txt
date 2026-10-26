@@ -1,0 +1,56 @@
+Android 4.2 车机：LAN Cast v6 无 ADB 日志测试（2026-10-26）
+
+Mac 上 APK 统一目录：/Users/hick/github/DiPlay/car-market-kit/APKs/
+局域网安装页：http://<Mac 当前 Wi-Fi IP>:18816/
+Mac 当前 IP 可用命令查询：ipconfig getifaddr en0
+故障 ZIP 收件箱：/Users/hick/github/DiPlay/car-market-kit/dumps/
+
+准备：
+1. Mac 运行 car-market-kit/Start-Car-Market-Hook.command。
+   新服务同时监听 TCP 18816（网页/日志接收）与 UDP 18817（自动发现）。
+2. 车机与 Mac 连接同一个自己控制的可信 Wi-Fi 或热点，不能启用客户端隔离。
+3. 从安装页下载 LAN Cast v6，升级 com.uu.uunavi。保留已装的原车应用，
+   遇到不认识的同名包或签名冲突不要强制覆盖。
+
+第一轮：主界面主动发送日志，不要求先发生故障
+1. 打开「车机局域网投屏」。
+2. 点击「立即上传诊断日志（不需要检测到异常）」。
+3. 按钮短暂不可用，显示自动寻找 Mac 的进度。
+4. 成功时界面应显示 HTTP 200 与当前找到的 Mac IP；失败时显示原因，
+   本地原有日志仍会保留。无需手工输入 IP。
+5. Mac 打开 car-market-kit/dumps/，应新增 car-app-dump-时间戳.zip。
+   解压后检查 events.log、about.txt；不要公开含设备信息的日志。
+
+第二轮：黑屏但没有崩溃/没有错误码
+1. 从 Bilibili 或腾讯视频发起兼容的 DLNA 投屏。
+2. 黑屏时在播放器顶部点击「报告黑屏 / 立即上传」，无论看起来是否有异常。
+3. 如果车机没有绘制该按钮，可按 Back 回到 LAN Cast 主界面，点击
+   「立即上传诊断日志」，同样可以上传前一次播放的日志。
+4. 日志将保存「prepared / firstFrameConfirmed / positionMs」等状态，
+   不上传实际视频、完整流地址、麦克风录音或认证文件。
+
+第三轮：自动上传
+1. 独立「投屏故障日志」入口可检查「故障后自动上报」开关（默认开启）。
+2. 触发播放器错误或 12 秒没有收到首帧回调的情况，应用自动尝试发送。
+   注意：旧版解码器可能不发送首帧回调，超时只是疑似黑屏提示；
+   即使没有自动触发，也仍可使用第二轮的手动按钮。
+3. 确认 Mac 收到新 ZIP。把自动上报开关关闭后，主动上传按钮仍可正常使用。
+
+查看最新诊断文件（Mac）：
+  ls -lt ~/github/DiPlay/car-market-kit/dumps/car-app-dump-*.zip | head
+  unzip -l <收到的诊断ZIP>
+  unzip -p <收到的诊断ZIP> events.log
+
+若 Mac 没有收到：
+- 检查 ipconfig getifaddr en0，可能从 192.168.* 改成 172.20.10.*。
+- Mac 确认 18816 和 UDP 18817 正在监听；Mac 防火墙/热点客户端隔离可能拦截广播。
+- 打开「投屏故障日志」入口查看上次自动发送结果并复制本地日志。
+- 如局域网完全无法互通，单靠 APK 无法将数据传回 Mac；本地故障日志不会因此丢失。
+
+本版验证边界：
+- 已验证 LAN Cast v6 APK 能编译并签名，最低 API17；Mac UDP 单播/广播发现成功，
+  真实 Mac HTTP 接口已收下合成 ZIP、校验 SHA256 后清理测试文件。
+- 尚未在实际 Android 4.2.2 车机上验证按钮显示及播放器兼容性；
+  真车测试结果才是最终结论。
+- DiPlay CarPlay v12 仍为上一个已发布版本；点击「连接」闪退的自动日志版本
+  v13 需要另外完成原厂 Android 4.2 工程编译，不能当作已经上线。

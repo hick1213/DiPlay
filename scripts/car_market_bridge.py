@@ -149,7 +149,9 @@ class MarketHTTP(BaseHTTPRequestHandler):
         source_ip = ipaddress.ip_address(self.client_address[0])
         allowed = (self.client_address[0] in getattr(self.server, "dump_clients", set())
                    or any(source_ip in subnet for subnet in
-                          getattr(self.server, "dump_subnets", ())))
+                          getattr(self.server, "dump_subnets", ()))
+                   or (getattr(self.server, "live_lan_check", None) is not None and
+                       self.server.live_lan_check(source_ip)))
         if not allowed:
             self.send_error(403, "Client not in trusted test LAN")
             return
@@ -222,9 +224,9 @@ class MarketHTTP(BaseHTTPRequestHandler):
 
             if "/lan-cast-android42.apk" in offered:
                 apps.append(card(
-                    "局域网投屏 · DLNA", "LAN Cast", "v5", "com.uu.uunavi",
-                    "支持兼容的 Bilibili、腾讯视频 DLNA 投屏；已修复服务声明和状态通知。"
-                    "不包含 AirPlay 镜像或 DRM 解码。",
+                    "局域网投屏 · DLNA", "LAN Cast", "v6", "com.uu.uunavi",
+                    "支持兼容的 Bilibili、腾讯视频 DLNA 投屏；新增主界面立即上传诊断日志、"
+                    "播放器报告黑屏和自动发现 Mac 的故障上报，不包含 AirPlay 镜像或 DRM 解码。",
                     "/lan-cast-android42.apk"))
 
             if getattr(self.server, "diagnostic_apk", None) is not None:
@@ -272,7 +274,8 @@ class MarketHTTP(BaseHTTPRequestHandler):
                 "填写 Mac 当前 IP 后确认上传到 car-market-kit/dumps。"
                 "Root / Wi-Fi ADB 需要设备已有授权，不能默认安装任意 APK。</p>"
                 "<p class='note'>DiPlay 使用私有测试身份材料，仅供当前授权测试。"
-                "不代表获得苹果官方 MFi 认证。LAN Cast v5 是 DLNA 接收器，不包含 AirPlay。</p>"
+                "不代表获得苹果官方 MFi 认证。LAN Cast v6 是 DLNA 接收器，不包含 AirPlay。"
+                "自动诊断仅在车机和 Mac 位于相互可达的可信局域网时可用。</p>"
                 "<p class='note'>若安装失败，可把提示和诊断报告带回排查；"
                 "旧版和无身份 DiPlay 基线不在本页展示。</p>"
                 "</section></body></html>"

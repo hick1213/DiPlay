@@ -3,7 +3,7 @@
 本地位置：/Users/hick/github/DiPlay/car-market-kit/
 所有用于安装的最新版 APK 都统一在 Mac 的
 /Users/hick/github/DiPlay/car-market-kit/APKs/
-当前仅保留：DiPlay v12、LAN Cast v5、车机诊断 v11、TVBox v5。
+当前仅保留：DiPlay v12、LAN Cast v6、车机诊断 v11、TVBox v5。
 MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
 不放在 APK 下载目录，也不会加入 Git。无需带移动硬盘。
 如需本地重新构建 DiPlay，请在仓库根目录执行：
@@ -16,13 +16,16 @@ MFi 私钥、证书单独放在 .private/mfi-test-20261026/offline-mfi/，
    页面统一展示 4 个最新版 APK，下载链接固定，按当前版本区分：
    DiPlay v12（无线 CarPlay、Android 声音、可选 FPS）：
    http://<Mac 当前局域网 IP>:18816/diplay-android42-toolbar-voice-v12.apk
-   LAN Cast v5（DLNA，Bilibili / 腾讯视频已实测成功）：
+   LAN Cast v6（DLNA、主动上传日志、报告黑屏和自动故障上报）：
    http://<Mac 当前局域网 IP>:18816/lan-cast-android42.apk
    车机深度诊断 v11（蓝车图标 / Root / 安装限制 Dump）：
    http://<Mac 当前局域网 IP>:18816/car-probe-settings.apk
    TVBox 4.2 v5（2.5.0-native42，固定下载链接）：
    http://<Mac 当前局域网 IP>:18816/tvbox-android42.apk
-   LAN Cast 当前为 v5（服务 ID / SCPD 参数符合 UPnP、双斜杠兼容、SSDP 缓存刷新）。
+   LAN Cast 当前为 v6（继承 v5 的 DLNA 修复；新增设备本地故障日志）。
+   主界面按钮「立即上传诊断日志」和播放界面「报告黑屏 / 立即上传」
+   不需要软件先检测到异常。车机从 UDP 18817 自动发现 Mac，
+   再通过 HTTP 18816 提交脱敏日志 ZIP；可以在故障日志界面关闭自动上报。
    历史 APK（包括无身份 DiPlay 基线）已从安装包目录清理；
    构建时的临时 Gradle APK 不视为发布包。
    DiPlay v12 使用 sogou.map 包名；连接成功并显示首帧后控制栏自动隐藏。

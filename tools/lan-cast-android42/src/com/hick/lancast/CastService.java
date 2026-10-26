@@ -30,6 +30,8 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.UUID;
+import com.shilapi.xcertplay.diagnostic.HeadUnitDiagnostics;
+import com.shilapi.xcertplay.diagnostic.HeadUnitAutoUploader;
 
 /**
  * Small UPnP/DLNA Digital Media Renderer for Android API 17. Only the common
@@ -76,6 +78,7 @@ public final class CastService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        HeadUnitDiagnostics.event("CAST_SERVICE_START", "DLNA receiver service onCreate");
         instance = this;
         running = true;
         eventing = new LanCastEventing(new LanCastEventing.BodyProvider() {
@@ -115,6 +118,7 @@ public final class CastService extends Service {
     static void updateTransport(String state) {
         if (state.equals(transport)) return;
         transport = state;
+        HeadUnitDiagnostics.event("DLNA_STATE", "transport=" + state);
         if (instance != null) {
             instance.announce();
             instance.publishEvent(AV);
@@ -168,6 +172,7 @@ public final class CastService extends Service {
                     port = webSocket.getLocalPort();
                     announce();
                     Log.i(TAG, "DLNA HTTP listening at " + ip + ":" + port);
+                    HeadUnitDiagnostics.event("DLNA_READY", "DLNA port=" + port);
                     while (running) {
                         final Socket accepted = webSocket.accept();
                         new Thread(new Runnable() {
@@ -175,6 +180,8 @@ public final class CastService extends Service {
                         }, "cast-http-peer").start();
                     }
                 } catch (Exception e) {
+                    HeadUnitDiagnostics.recordException("DLNA receiver HTTP", e);
+                    HeadUnitAutoUploader.schedule(CastService.this, "DLNA server startup/HTTP failure");
                     if (running) { lastError = "HTTP: " + e.getMessage(); announce(); Log.e(TAG, lastError, e); }
                 }
             }
@@ -572,12 +579,15 @@ public final class CastService extends Service {
                     try { host = new URI(url).getHost(); } catch (Exception ignored) { }
                     Log.i(TAG, "DLNA SetAVTransportURI accepted scheme=" +
                         url.substring(0, url.indexOf(':')) + " host=" + host + " length=" + url.length());
+                    HeadUnitDiagnostics.event("DLNA_URI", "scheme=" +
+                        url.substring(0, url.indexOf(':')) + " bytes=" + url.length());
                 } else {
                     Log.w(TAG, "DLNA SetAVTransportURI rejected scheme=unsupported/empty length=" + url.length());
                 }
             } else if ("Play".equals(action)) {
                 if (mediaUri.length() > 0) {
                     Log.i(TAG, "DLNA Play accepted currentUri=true");
+                    HeadUnitDiagnostics.event("DLNA_PLAY", "media URI received, launching Android decoder");
                     if ("PAUSED_PLAYBACK".equals(transport)) playbackCommand("play", 0);
                     else {
                         Intent play = new Intent(this, CastPlayerActivity.class);

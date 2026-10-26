@@ -3,6 +3,7 @@
 import http.client
 import io
 import json
+import socket
 import tempfile
 import threading
 import unittest
@@ -10,7 +11,8 @@ import zipfile
 from pathlib import Path
 
 from scripts.car_market_bridge import Catalog, ThreadingHTTPServer
-from scripts.car_market_hook import HookServerBundle, check_servers
+from scripts.car_market_hook import (HookServerBundle, check_servers,
+                                     check_discovery, DISCOVERY_QUERY, DISCOVERY_RESPONSE)
 from scripts.car_market_host80 import DiscoveryHandler
 
 
@@ -27,6 +29,7 @@ class HookBundleTest(unittest.TestCase):
                 bundle.start()
                 self.assertEqual(1, check_servers(
                     "127.0.0.1", *bundle.ports, additional_routes=("/tvbox-android42.apk",)))
+                self.assertTrue(check_discovery("127.0.0.1", bundle.discovery.server_address[1]))
                 self.assertEqual(original, apk.read_bytes())
                 conn = http.client.HTTPConnection("127.0.0.1", bundle.ports[0], timeout=3)
                 try:
@@ -42,6 +45,78 @@ class HookBundleTest(unittest.TestCase):
                     self.assertNotIn("href='/lan-cast-android42.apk'", page)
                 finally:
                     conn.close()
+            finally:
+                bundle.close()
+
+    def test_udp_auto_discovery_nonce_and_unknown_requests(self):
+        with tempfile.TemporaryDirectory(prefix="car-diagnostic-discovery-") as directory:
+            file = Path(directory) / "tvbox.apk"
+            file.write_bytes(b"PK\\x03\\x04" + b"test" * 150)
+            catalog = Catalog(file, "test", "127.0.0.1", 0, 0)
+            bundle = HookServerBundle(catalog, "127.0.0.1", 0, 0, 0,
+                                      ["127.0.0.1"])
+            try:
+                bundle.start()
+                port = bundle.discovery.server_address[1]
+                self.assertTrue(check_discovery("127.0.0.1", port))
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+                    client.settimeout(0.25)
+                    client.sendto(b"UNKNOWN_DISCOVERY_REQUEST", ("127.0.0.1", port))
+                    with self.assertRaises(socket.timeout):
+                        client.recvfrom(256)
+                    client.sendto(b"DIPLAY_HEADUNIT_LOG_DISCOVER_V1:invalid",
+                                  ("127.0.0.1", port))
+                    with self.assertRaises(socket.timeout):
+                        client.recvfrom(256)
+            finally:
+                bundle.close()
+
+    def test_dynamic_lan_restriction_applies_to_discovery_and_uploaded_zip(self):
+        """Test address changes without requiring a fixed IP or leaking uploads."""
+        with tempfile.TemporaryDirectory(prefix="car-dynamic-lan-") as directory:
+            base = Path(directory)
+            tvbox = base / "tvbox.apk"
+            tvbox.write_bytes(b"PK\\x03\\x04" + b"test" * 150)
+            catalog = Catalog(tvbox, "test", "127.0.0.1", 0, 0)
+            allowed = [True]
+            bundle = HookServerBundle(catalog, "127.0.0.1", 0, 0, 0, [],
+                                      dump_dir=base / "dumps",
+                                      live_lan_check=lambda address: allowed[0])
+            try:
+                bundle.start()
+                # Force *only* the live-network callback to grant access.
+                bundle.http.dump_clients.clear()
+                bundle.http.dump_subnets = ()
+                bundle.discovery.allowed_clients.clear()
+                bundle.discovery.allowed_subnets = ()
+                self.assertTrue(check_discovery("127.0.0.1", bundle.discovery.server_address[1]))
+
+                payload = io.BytesIO()
+                with zipfile.ZipFile(payload, "w") as archive:
+                    archive.writestr("events.log", "MANUAL_REPORT LAN Cast")
+                conn = http.client.HTTPConnection("127.0.0.1", bundle.ports[0], timeout=2)
+                try:
+                    conn.request("POST", "/api/diagnostic-dump", body=payload.getvalue(),
+                                 headers={"Content-Type": "application/zip"})
+                    response = conn.getresponse()
+                    self.assertEqual(200, response.status)
+                    response.read()
+                    self.assertEqual(1, len(list((base / "dumps").glob("car-app-dump-*.zip"))))
+                    allowed[0] = False
+                    conn.request("POST", "/api/diagnostic-dump", body=payload.getvalue(),
+                                 headers={"Content-Type": "application/zip"})
+                    response = conn.getresponse()
+                    self.assertEqual(403, response.status)
+                    response.read()
+                finally:
+                    conn.close()
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as discovery:
+                    discovery.settimeout(0.25)
+                    nonce = b"0123456789abcdef"
+                    discovery.sendto(b"DIPLAY_HEADUNIT_LOG_DISCOVER_V1:" + nonce,
+                                     ("127.0.0.1", bundle.discovery.server_address[1]))
+                    with self.assertRaises(socket.timeout):
+                        discovery.recvfrom(256)
             finally:
                 bundle.close()
 
