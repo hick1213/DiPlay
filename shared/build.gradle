@@ -6,7 +6,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        minSdk = 24
+        // The CarPlay protocol/USB transport also runs in the API 17 legacy head-unit app.
+        // Native helpers remain built for newer Android and are excluded from that APK.
+        minSdk = 17
         consumerProguardFiles 'ambient-consumer-rules.pro'
         targetSdk = 37
 
@@ -23,6 +25,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     ndkVersion = '28.2.13676358'
+    // NDK 28 produces >=21 native helpers. The API 17 APK explicitly excludes
+    // every .so; only Java/Kotlin code is used there. Modern apps still package
+    // the helpers at their original APP_PLATFORM=android-24.
+    experimentalProperties['android.ndk.suppressMinSdkVersionError'] = 21
     externalNativeBuild {
         ndkBuild {
             path = file('src/main/jni/Android.mk')
@@ -38,7 +44,9 @@ android {
     }
 }
 dependencies {
-    implementation libs.androidx.app
+    // Only the Automotive app uses these Car App classes. Do not force API 24 on
+    // the protocol library or bring the Car App runtime into the API 17 APK.
+    compileOnly libs.androidx.app
     implementation libs.bouncycastle
     implementation libs.jmdns
     testImplementation libs.junit

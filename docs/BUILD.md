@@ -11,6 +11,7 @@ Select `mobile` to build the main DiPlay app.
 | Gradle module | Purpose | Debug APK |
 | --- | --- | --- |
 | `:mobile` | Main DiPlay app for Android head units | `mobile/build/outputs/apk/debug/mobile-debug.apk` |
+| `:legacy` | Experimental wireless-only Android 4.2.x / API 17 head-unit host | `legacy/build/outputs/apk/debug/legacy-debug.apk` |
 | `:maphost` | Sample application that displays a map from DiPlay | `samples/maphost/build/outputs/apk/debug/maphost-debug.apk` |
 | `:home` | Optional DiPlay Home launcher | `samples/home/build/outputs/apk/debug/home-debug.apk` |
 | `:automotive` | Separate Android Automotive application inherited from xcertplay | `automotive/build/outputs/apk/debug/automotive-debug.apk` |
@@ -93,6 +94,83 @@ Keep test private keys outside Git.
 
 To build an APK without installation, run `:mobile:assembleDebug` in the Android Studio terminal.
 Select the APK from the `mobile` output directory.
+
+## Android 4.2.x experimental APK
+
+Android 4.2.x (API 17) **cannot run the standard `:mobile` APK**. The separate `:legacy`
+application retains the **wireless** Bluetooth iAP2 + Wi-Fi/AirPlay transport but uses the platform Holo Views,
+`MediaCodec` H.264 decoding, and old `AudioTrack` PCM/AAC playback. Connection options are
+Wi-Fi Direct, manually enabled head-unit hotspot, and an existing Wi-Fi LAN.
+It deliberately has no wired USB/NCM CarPlay, Compose, Android Auto, BYD cluster integration,
+microphone/phone-call audio, HEVC or software Opus decoder.
+The default package ID is `com.shihab.diplay.legacy`, so it can be
+installed alongside the modern app on another test device. For old vendor app stores,
+the application ID can be set at build time without altering the Java/Kotlin namespace:
+
+```sh
+./gradlew :legacy:assembleDebug -PdiplayLegacyApplicationId=com.example.replaceableapp
+```
+
+**No-ADB Android 4.2 head units:** The browser can download an APK from an HTTP server
+on the same LAN (for example, serve the `legacy/build/outputs/apk/debug` directory from
+the Mac), but a restricted vendor installer may still block installation. Changing the
+package ID alone **does not** bypass installation policy or Android's signature check.
+An APK signed with a different key cannot update an installed package; safely replacing
+one requires removing the existing package, which deletes its app data. Do not select a
+system app, launcher, or an app with irreplaceable data as the replacement target.
+If the head unit permits only its original app store to initiate installation, inspect
+that store's legitimate download/install flow before preparing the final APK. You need
+the precise package ID and store request details; do not assume a package name is
+whitelisted based on a browser download alone.
+
+For a head unit with **browser access but no ADB or system Settings**, first run the
+read-only diagnostic server on the Mac, using its actual Wi-Fi LAN IP address:
+
+```sh
+python3 scripts/car_install_probe.py --host 192.168.1.108 --port 18082
+```
+
+Open `http://<Mac LAN IP>:18082/` on the head unit. The page provides a harmless
+~40 KB ZIP delivered over ~20 seconds to test whether a Download notification can
+open Settings via a long-press, and a separate link to download the built APK.
+Downloading alone cannot bypass the car's installer restrictions. Take a photo of
+the first installer error, do **not** uninstall built-in apps, and stop the server
+with Ctrl-C when diagnostics are complete. The server only serves those two fixed
+downloads and a static instructions page; use it only on a trusted LAN.
+
+Build the source-only APK (it will install and show the interface but cannot authenticate
+CarPlay without an identity):
+
+```sh
+./gradlew :legacy:testDebugUnitTest :legacy:assembleDebug
+```
+
+For a wireless CarPlay test, provide your **own authorized** local MFi identity in an external
+folder as explained under *Build a standalone car-test APK* below, then build:
+
+```sh
+DIPLAY_AUTH_ASSETS_DIR=/absolute/path/to/runtime-assets ./gradlew :legacy:assembleStandaloneDebug
+```
+
+Install `legacy/build/outputs/apk/debug/legacy-debug.apk` on the **Android 4.2 car head unit**,
+not on the iPhone. Turn on Bluetooth and pair the iPhone in the head unit's system settings.
+In DiPlay choose **选择手机**, then select one of three Wi-Fi modes:
+
+- **Wi-Fi Direct**: DiPlay requests a temporary Wi-Fi Direct group from Android; the firmware
+  must support acting as a group owner. The iPhone is invited to the resulting AP over Bluetooth.
+- **车机热点**: First enable the car's own hotspot in its system settings, then enter the
+  actual SSID and password in **网络参数**. DiPlay attaches to that network; it does not alter the AP.
+- **同一 Wi-Fi**: Join the same external Wi-Fi on the car and iPhone, then enter that SSID and
+  password. Android 4.2 uses a dedicated Wi-Fi station/IPv4 path without API 21 NetworkCallback.
+
+Click **连接** and approve any CarPlay prompt on the iPhone. No USB connection is involved.
+API 17 supports classic Bluetooth and Wi-Fi Direct, but device firmware may disable either;
+these modes have not been validated on a physical Android 4.2 head unit.
+H.264 playback also depends on the head unit's hardware decoder.
+Use `adb logcat -s DiPlay-Android42 IphoneCarPlayConfiguration` for first-connection diagnostics.
+
+The `:legacy` APK is **experimental**: passing Gradle and unit tests establishes API 17
+build/install eligibility, not successful iPhone pairing or real-time CarPlay performance.
 
 ## Check the source build
 

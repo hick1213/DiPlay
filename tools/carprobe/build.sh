@@ -1,0 +1,46 @@
+#!/bin/sh
+# Offline, minimal Android 4.2 APK build; writes all intermediate files to external storage.
+set -eu
+
+src_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+output_dir=${1:-/Volumes/untitled/DiPlay-car-probe}
+sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
+tools_dir="$sdk_dir/build-tools/34.0.0"
+android_jar="$sdk_dir/platforms/android-21/android.jar"
+keystore="$HOME/.android/debug.keystore"
+output_apk="$output_dir/car-probe-android42-debug-v2.apk"
+
+if [ ! -f "$keystore" ]; then
+    echo "Missing Android debug keystore: $keystore" >&2
+    exit 1
+fi
+if [ -e "$output_apk" ]; then
+    echo "APK exists, will not overwrite: $output_apk" >&2
+    exit 1
+fi
+
+mkdir -p "$output_dir"
+build_dir=$(mktemp -d "$output_dir/.carprobe-build.XXXXXX")
+mkdir -p "$build_dir/classes" "$build_dir/dex"
+
+javac -source 7 -target 7 -cp "$android_jar" -d "$build_dir/classes" \
+    "$src_dir/src/com/hick/carprobe/ProbeActivity.java" \
+    "$src_dir/src/com/hick/carprobe/AdvancedDiagnostics.java" \
+    "$src_dir/src/com/hick/carprobe/DiagnosticLog.java"
+# exFAT on macOS creates AppleDouble ._ sidecar files. Passing only actual
+# compiled class files prevents D8 from ingesting those invalid sidecars.
+"$tools_dir/d8" --min-api 17 --lib "$android_jar" --output "$build_dir/dex" \
+    "$build_dir"/classes/com/hick/carprobe/*.class
+"$tools_dir/aapt2" link -o "$build_dir/manifest.apk" \
+    --manifest "$src_dir/AndroidManifest.xml" -I "$android_jar" \
+    --min-sdk-version 17 --target-sdk-version 17
+(cd "$build_dir/dex" && zip -q "$build_dir/manifest.apk" classes.dex)
+"$tools_dir/zipalign" -f 4 "$build_dir/manifest.apk" "$build_dir/aligned.apk"
+"$tools_dir/apksigner" sign \
+    --ks "$keystore" --ks-key-alias androiddebugkey \
+    --ks-pass pass:android --key-pass pass:android \
+    --v1-signing-enabled true --v2-signing-enabled false --v3-signing-enabled false \
+    --out "$output_apk" "$build_dir/aligned.apk"
+"$tools_dir/apksigner" verify --verbose --min-sdk-version 17 "$output_apk"
+"$tools_dir/aapt2" dump badging "$output_apk" | head -n 12
+echo "Built: $output_apk"

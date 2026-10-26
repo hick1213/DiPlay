@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.orchestration
 import com.shilapi.xcertplay.transport.Iap2IdentificationConfig
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.network.WifiP2pChannels
+import java.io.File
 import java.net.Inet6Address
 import java.net.InetAddress
 
@@ -70,8 +71,13 @@ class CarPlayRuntimeConfig(
     val wifiP2pPreferredChannel: Int = WifiP2pChannels.AUTO,
     val existingWifiSsid: String = "",
     val existingWifiPassphrase: String = "",
+    /** Host-provisioned private identity directory, shared with its CarPlay controller. */
+    val localMfiDirectory: String? = null,
 ) {
     init {
+        require(localMfiDirectory == null || File(localMfiDirectory).isAbsolute) {
+            "Local MFi directory must be an absolute path"
+        }
         require(iphoneDevices.all { it.vendorId == APPLE_VENDOR_ID }) {
             "iPhone USB identities must use Apple vendor ID 0x${APPLE_VENDOR_ID.toString(16)}"
         }

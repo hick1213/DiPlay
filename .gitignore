@@ -23,6 +23,14 @@ captures/
 Thumbs.db
 *.log
 /.idea
+__pycache__/
+*.pyc
+
+# Car head-unit diagnostic run output, hardware dumps and locally packaged APKs.
+# The source is versioned; diagnostic user data and MFi identities are not.
+/car-market-kit/dumps/
+/car-market-kit/logs/
+/car-market-kit/APKs/
 
 # Local beta credentials and release signing (never commit)
 .private/

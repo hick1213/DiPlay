@@ -40,7 +40,7 @@ class ManualHotspotManager(
     private val waitLock = Object()
     private var confirmed: HotspotSelection? = null
     private var lastSampleLog = emptyList<String>()
-    private val wifiManager = appContext.getSystemService(WifiManager::class.java)
+    private val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         ?: throw IllegalStateException("WifiManager is unavailable")
     private val expectedSsid = ssid
     private val passphrase = passphrase
@@ -236,7 +236,9 @@ class ManualHotspotManager(
             null
         } ?: return null
         if (unquote(connectionInfo.ssid) != expectedSsid) return null
-        return connectionInfo.frequency.takeIf { it > 0 }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            connectionInfo.frequency.takeIf { it > 0 }
+        } else null
     }
 
     private fun frequencyFromScanResult(localInterface: LocalHotspotInterface): Int? {

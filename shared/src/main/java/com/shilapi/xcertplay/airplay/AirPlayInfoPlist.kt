@@ -21,6 +21,7 @@ object AirPlayInfoPlist {
     private const val RESOURCE_SCREEN = 1
     private const val RESOURCE_AUDIO = 2
     private const val TRANSFER_TAKE = 1
+    private const val TRANSFER_UNTAKE = 2
     private const val PRIORITY_NICE_TO_HAVE = 100
     private const val CONSTRAINT_ANYTIME = 100
 
@@ -46,12 +47,13 @@ object AirPlayInfoPlist {
             "rightHandDrive" to config.rightHandDrive,
             "keepAliveLowPower" to false,
             "keepAliveSendStatsAsBody" to false,
-            "modes" to modes(),
+            "modes" to modes(config.accessoryOwnsMainAudio),
         )
         if (!config.disableAudioOutput) {
             info["audioLatencies"] = audioLatencies()
-            info["audioFormats"] = audioFormats(config.entertainmentSampleRate, config.microphone, config.mainBufferedAudio, config.microphoneOpus,
-                config.speechWithout8And16Khz)
+            info["audioFormats"] = audioFormats(config.entertainmentSampleRate, config.microphone,
+                config.mainBufferedAudio, config.microphoneOpus,
+                config.speechWithout8And16Khz, config.opusAudioOutput)
         }
         info["extendedFeatures"] = listOf("vocoderInfo", "enhancedRequestCarUI")
         info["displays"] = displays
@@ -84,21 +86,33 @@ object AirPlayInfoPlist {
         return info
     }
 
-    private fun resource(resourceId: Int): Map<String, Any?> = linkedMapOf(
+    private fun resource(resourceId: Int, transferType: Int = TRANSFER_TAKE): Map<String, Any?> = linkedMapOf(
         "resourceID" to resourceId,
-        "transferType" to TRANSFER_TAKE,
+        "transferType" to transferType,
         "transferPriority" to PRIORITY_NICE_TO_HAVE,
         "takeConstraint" to CONSTRAINT_ANYTIME,
         "borrowConstraint" to CONSTRAINT_ANYTIME,
         "unborrowConstraint" to CONSTRAINT_ANYTIME,
     )
 
-    private fun modes(): Map<String, Any?> = linkedMapOf(
-        "resources" to listOf(resource(RESOURCE_SCREEN), resource(RESOURCE_AUDIO)),
+    private fun modes(accessoryOwnsMainAudio: Boolean): Map<String, Any?> = linkedMapOf(
+        "resources" to listOf(resource(RESOURCE_SCREEN),
+            resource(RESOURCE_AUDIO, if (accessoryOwnsMainAudio) TRANSFER_TAKE else TRANSFER_UNTAKE)),
         "appStates" to listOf(
             linkedMapOf("appStateID" to 2, "state" to false),
             linkedMapOf("appStateID" to 1, "speechMode" to -1),
             linkedMapOf("appStateID" to 3, "state" to false),
+        ),
+    )
+
+    /** Release native speaker ownership without releasing the CarPlay display. */
+    fun releaseMainAudioCommand(): Map<String, Any?> = linkedMapOf(
+        "type" to "changeModes",
+        "params" to linkedMapOf(
+            "resources" to listOf(linkedMapOf(
+                "resourceID" to RESOURCE_AUDIO,
+                "transferType" to TRANSFER_UNTAKE,
+            )),
         ),
     )
 
@@ -125,6 +139,7 @@ object AirPlayInfoPlist {
         mainBuffered: Boolean = false,
         microphoneOpus: Boolean = true,
         speechWithout8And16Khz: Boolean = false,
+        opusAudioOutput: Boolean = true,
     ): List<Map<String, Any?>> {
         fun format(type: Int, audioType: String, outputFormats: Int, inputFormats: Int? = null): Map<String, Any?> {
             val entry = linkedMapOf<String, Any?>(
@@ -142,7 +157,7 @@ object AirPlayInfoPlist {
         // PCM 8 kHz and 16 kHz, mono and stereo.
         val speech = if (speechWithout8And16Khz) pcm and 0x3c.inv() else pcm
         val pcmMono = 0x154 or (if (is48) 0x4000 else 0x400)
-        val opus = 0x70000000
+        val opus = if (opusAudioOutput) 0x70000000 else 0
         val aacLc = if (is48) 0x800000 else 0x400000
         val pcmInput = if (microphone) pcmMono else null
         // Retain Opus whenever platform or bundled software encoding is usable. PCM-only wireless

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="title.navi"
+    android:versionCode="8"
+    android:versionName="8.0-app-dump">
+
+    <uses-sdk android:minSdkVersion="17" android:targetSdkVersion="17" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
+
+    <application android:label="车机深度诊断"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.Holo.Light">
+        <activity android:name="com.hick.carprobe.WhitelistProbeActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name="com.hick.carprobe.StoreCacheInstallerActivity"
+            android:exported="false" />
+        <activity android:name="com.hick.carprobe.RootResearchActivity"
+            android:exported="false" />
+        <activity android:name="com.hick.carprobe.AppDumpActivity"
+            android:exported="false" />
+        <service android:name="com.hick.carprobe.ProbeMonitorService"
+            android:exported="false" />
+    </application>
+</manifest>

@@ -47,7 +47,8 @@ class WifiP2pGroupManager(
         require(WifiP2pChannels.isValid(preferredChannel)) { "Unsupported Wi-Fi Direct channel: $preferredChannel" }
     }
     private val appContext = context.applicationContext
-    private val p2pManager = appContext.getSystemService(WifiP2pManager::class.java)
+    // Context.getSystemService(Class) appeared in API 23; Wi-Fi Direct itself exists since API 14.
+    private val p2pManager = appContext.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         ?: throw IllegalStateException("WifiP2pManager is unavailable")
     private val stateLock = Object()
     // The legacy channel API changes shared supplicant state, rather than this Channel object.
@@ -741,21 +742,25 @@ class WifiP2pGroupManager(
 
     @Suppress("DEPRECATION")
     private fun readStation(): Station = runCatching {
-        val info = appContext.getSystemService(WifiManager::class.java)?.connectionInfo
-        Station(info?.supplicantState, info?.frequency?.takeIf { it > 0 })
+        val info = (appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)?.connectionInfo
+        // WifiInfo.getFrequency did not exist on Android 4.2; channel selection remains automatic.
+        Station(info?.supplicantState,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) info?.frequency?.takeIf { it > 0 } else null)
     }.getOrDefault(Station(null, null))
 
     /** Returns false only when Wi-Fi is on and reports no 5 GHz band; it also reads false while Wi-Fi is off. */
     private fun checkPrerequisites(station: Station): Boolean {
-        val wifi = appContext.getSystemService(WifiManager::class.java)
-        val fiveGhzSupported = runCatching { wifi?.is5GHzBandSupported }.getOrNull()
+        val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val fiveGhzSupported = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            runCatching { wifi?.is5GHzBandSupported }.getOrNull()
+        } else null
         val wifiEnabled = runCatching { wifi?.isWifiEnabled }.getOrNull()
         val locationEnabled = runCatching {
-            appContext.getSystemService(LocationManager::class.java)?.isLocationEnabledCompat()
+            (appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager)?.isLocationEnabledCompat()
         }.getOrNull()
         val required = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES
             else Manifest.permission.ACCESS_FINE_LOCATION
-        val granted = appContext.checkSelfPermission(required) == PackageManager.PERMISSION_GRANTED
+        val granted = appContext.checkCallingOrSelfPermission(required) == PackageManager.PERMISSION_GRANTED
         val locationAccessMode = if (Build.VERSION.SDK_INT in 29..32) runCatching {
             appContext.getSystemService(AppOpsManager::class.java)?.unsafeCheckOpNoThrow(
                 AppOpsManager.OPSTR_FINE_LOCATION, android.os.Process.myUid(), appContext.packageName)

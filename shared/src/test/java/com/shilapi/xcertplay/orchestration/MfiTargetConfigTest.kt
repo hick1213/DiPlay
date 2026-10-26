@@ -51,18 +51,30 @@ class MfiTargetConfigTest {
         }
     }
 
+    @Test
+    fun localDirectoryMustBeAbsoluteWhenProvided() {
+        assertThrows(IllegalArgumentException::class.java) {
+            config(mfiTarget = MfiTarget.LOCAL, localMfiDirectory = "offline-mfi")
+        }
+        assertEquals("/data/data/sogou.map/files/offline-mfi",
+            config(mfiTarget = MfiTarget.LOCAL,
+                localMfiDirectory = "/data/data/sogou.map/files/offline-mfi").localMfiDirectory)
+    }
+
     private fun config(
         mfiTarget: MfiTarget,
         ch341Devices: List<UsbDeviceId> = emptyList(),
         linuxI2cPath: String? = null,
         remoteMfiServer: String? = null,
         remoteMfiToken: String? = null,
+        localMfiDirectory: String? = null,
     ): CarPlayRuntimeConfig = CarPlayRuntimeConfig(
         mfiTarget = mfiTarget,
         ch341Devices = ch341Devices,
         linuxI2cPath = linuxI2cPath,
         remoteMfiServer = remoteMfiServer,
         remoteMfiToken = remoteMfiToken,
+        localMfiDirectory = localMfiDirectory,
         identification = Iap2IdentificationConfig(
             name = "test",
             modelIdentifier = "test",

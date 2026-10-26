@@ -1,0 +1,4 @@
+# Runtime APKs and logs are Mac-local artifacts; do not accidentally push them to GitHub.
+/APKs/
+/logs/
+/dumps/

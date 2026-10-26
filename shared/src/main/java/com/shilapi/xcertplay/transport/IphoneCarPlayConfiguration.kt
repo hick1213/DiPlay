@@ -5,7 +5,19 @@ import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
+import android.os.Build
 import android.util.Log
+
+/** The USB interface fields Android 4.2 exposes, without API 21's UsbConfiguration. */
+internal data class LegacyUsbInterfaceSignature(val kind: Int, val subclass: Int, val protocol: Int)
+
+internal data class LegacyCarPlayUsbMode(
+    val usbMuxIndex: Int?,
+    val hasNcm: Boolean,
+    val hasAppleEthernet: Boolean,
+) {
+    val isUsable: Boolean get() = usbMuxIndex != null && hasNcm
+}
 
 /**
  * Descriptor-based discovery of the iPhone's CarPlay configuration.
@@ -27,7 +39,34 @@ object IphoneCarPlayConfiguration {
     private const val PREFERRED_USBMUX_OUT = 0x04
     private const val PREFERRED_USBMUX_IN = 0x85
 
+    /** API 17 can enumerate the active interfaces but cannot enumerate USB configurations. */
+    internal fun classifyLegacyInterfaces(interfaces: List<LegacyUsbInterfaceSignature>): LegacyCarPlayUsbMode =
+        LegacyCarPlayUsbMode(
+            usbMuxIndex = interfaces.indexOfFirst {
+                it.kind == USBMUX_CLASS && it.subclass == USBMUX_SUBCLASS && it.protocol == USBMUX_PROTOCOL
+            }.takeIf { it >= 0 },
+            hasNcm = interfaces.any { it.kind == NCM_CONTROL_CLASS && it.subclass == NCM_CONTROL_SUBCLASS },
+            hasAppleEthernet = interfaces.any {
+                it.kind == APPLE_ETHERNET_CLASS && it.subclass == APPLE_ETHERNET_SUBCLASS &&
+                    it.protocol == APPLE_ETHERNET_PROTOCOL
+            },
+        )
+
+    private fun activeLegacyMode(device: UsbDevice): LegacyCarPlayUsbMode = classifyLegacyInterfaces(
+        (0 until device.interfaceCount).map { index ->
+            device.getInterface(index).let {
+                LegacyUsbInterfaceSignature(it.interfaceClass, it.interfaceSubclass, it.interfaceProtocol)
+            }
+        },
+    )
+
+    fun isLegacyCarPlayMode(device: UsbDevice): Boolean = activeLegacyMode(device).isUsable
+
+    fun legacyUsbMuxInterface(device: UsbDevice): UsbInterface? =
+        activeLegacyMode(device).takeIf { it.isUsable }?.usbMuxIndex?.let(device::getInterface)
+
     fun find(device: UsbDevice): UsbConfiguration? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return null
         val configurations = (0 until device.configurationCount).map(device::getConfiguration)
         val chosen = configurations.firstOrNull { usbMuxInterface(it) != null && hasCdcNcm(it) && hasAppleEthernet(it) }
             ?: configurations.firstOrNull { usbMuxInterface(it) != null && hasCdcNcm(it) }

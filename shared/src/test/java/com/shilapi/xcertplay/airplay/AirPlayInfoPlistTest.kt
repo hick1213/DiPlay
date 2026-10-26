@@ -10,6 +10,80 @@ import org.junit.Test
 
 class AirPlayInfoPlistTest {
     @Test
+    fun android42FullDuplexAudioHasActualMicInputFormats() {
+        val config = AirPlayConfig(
+            deviceName = "test", deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02", sourceVersion = "950.7.1",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            microphone = true, microphoneOpus = true,
+            mainBufferedAudio = true, accessoryOwnsMainAudio = false,
+        )
+        val info = AirPlayInfoPlist.build(config)
+        val formats = (info["audioFormats"] as List<*>).filterIsInstance<Map<*, *>>()
+        for (type in listOf("default", "telephony", "speechRecognition")) {
+            val format = formats.single { it["type"] == 100 && it["audioType"] == type }
+            assertTrue("Missing CarPlay microphone input $type",
+                (format["audioInputFormats"] as Int) != 0)
+        }
+        assertTrue(formats.any { it["type"] == 103 && it["audioType"] == "media" })
+    }
+
+    @Test
+    fun dedicatedCarPlayReceiverReleasesOnlyMainAudioToIphone() {
+        val config = AirPlayConfig(
+            deviceName = "test", deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02", sourceVersion = "950.7.1",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+            accessoryOwnsMainAudio = false,
+        )
+        val modes = AirPlayInfoPlist.build(config)["modes"] as Map<*, *>
+        val resources = (modes["resources"] as List<*>).filterIsInstance<Map<*, *>>()
+        assertEquals(1, resources.single { it["resourceID"] == 1 }["transferType"])
+        assertEquals(2, resources.single { it["resourceID"] == 2 }["transferType"])
+        val command = AirPlayInfoPlist.releaseMainAudioCommand()
+        assertEquals("changeModes", command["type"])
+        val params = command["params"] as Map<*, *>
+        val release = (params["resources"] as List<*>).single() as Map<*, *>
+        assertEquals(2, release["resourceID"])
+        assertEquals(2, release["transferType"])
+    }
+
+    @Test
+    fun existingReceiversRetainTheirNativeAudioOwnershipDefault() {
+        val config = AirPlayConfig(
+            deviceName = "test", deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02", sourceVersion = "950.7.1",
+            main = AirPlayDisplayConfig(widthPixels = 1280, heightPixels = 720),
+        )
+        val modes = AirPlayInfoPlist.build(config)["modes"] as Map<*, *>
+        val resources = (modes["resources"] as List<*>).filterIsInstance<Map<*, *>>()
+        assertEquals(1, resources.single { it["resourceID"] == 2 }["transferType"])
+    }
+
+    @Test
+    fun android42WithoutOpusDecoderOffersOnlySupportedDownlinkAndBufferedAac() {
+        val config = AirPlayConfig(
+            deviceName = "test", deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02", sourceVersion = "950.7.1",
+            main = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
+            microphone = false, microphoneOpus = false, opusAudioOutput = false,
+            mainBufferedAudio = true,
+        )
+        val info = AirPlayInfoPlist.build(config)
+        assertTrue(info.containsKey("mainBufferedInfo"))
+        val formats = (info["audioFormats"] as List<*>).filterIsInstance<Map<*, *>>()
+        val buffered = formats.single { it["type"] == 103 && it["audioType"] == "media" }
+        assertEquals(0x800000, buffered["audioOutputFormats"])
+        for (entry in formats) {
+            val bits = entry["audioOutputFormats"] as Int
+            assertEquals("Opus must not be offered by the Android 4.2 renderer", 0,
+                bits and 0x70000000)
+        }
+        assertTrue(formats.any { it["type"] == 100 && it["audioType"] == "media" })
+        assertTrue(formats.any { it["type"] == 102 && it["audioType"] == "media" })
+    }
+
+    @Test
     fun bothDisplaysDeclareAutomaticAppearanceAtConnection() {
         val config = AirPlayConfig(
             deviceName = "test", deviceId = "02:00:00:00:00:02", btMac = "02:00:00:00:00:02",

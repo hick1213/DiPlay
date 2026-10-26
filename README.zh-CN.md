@@ -12,6 +12,8 @@
 
 请安装在允许 APK 安装的 Android 7.0+（API 24+）车机上；Android 7.0–8.1 尚未经实车验证。无需越狱、转接盒、账户或认证服务器。有线及无线核心连接不要求 ADB；可选车辆数据及车辆控制需要支持的固件和已授权网络 ADB。
 
+**Android 4.2.x（API 17）**另外提供实验性 `:legacy` 构建：仅保留无线 CarPlay，支持 Wi-Fi Direct、车机自带热点和同一 Wi-Fi 网络，使用传统蓝牙配对和原生 Holo 界面、旧版 H.264／PCM／AAC 音视频 API。不支持有线、麦克风和比亚迪仪表功能。它不是上述 Android 7+ 正式 APK，尚未经过 Android 4.2 实车验证。参见[源码构建和测试说明](docs/BUILD.md#android-42x-experimental-apk)。
+
 Wi-Fi Direct 现支持 Android 7.0–9 的旧版建组路径，使用系统返回的真实凭据。首选信道依赖固件 API；Android 7.0–9 无法读回协商频率，所以请求信道在诊断中标为未经验证，系统默认为信道 0。Android 10+ 保留频率验证。也可使用车机内置热点、USB 或[现有 Wi-Fi／同一局域网](docs/EXISTING_WIFI.md)；同一局域网模式由车机和 iPhone 自行连接外部路由器，DiPlay 不替你修改默认路由。[Android 9 Wi-Fi Direct 限制](docs/ANDROID9_WIFI_DIRECT.md)说明清理及持久配置边界。
 
 ### 新增与修正

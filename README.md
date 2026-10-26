@@ -14,6 +14,8 @@
 
 Install on the **car**, not the iPhone. No jailbreak, dongle, Mac, account or authentication server is required for use. Core CarPlay does not require ADB; optional dashboard, battery, wheel-speed and parked-video features do. Your head unit must permit APK installation. The APK supports Android 7.0+ (API 24); Android 7.0–8.1 support is not yet confirmed on a vehicle. Wireless supports Wi-Fi Direct, the car’s existing hotspot or Existing Wi-Fi / Same LAN. Android 7.0–9 Wi-Fi Direct uses a firmware-dependent legacy path with generated group credentials and unverified requested frequency; see [Android 9 Wi-Fi Direct](docs/ANDROID9_WIFI_DIRECT.md). Android 10+ verifies its negotiated group frequency.
 
+For Android **4.2.x (API 17)** there is a separate, **experimental wireless-only** `:legacy` source build with a simple Holo interface. It supports Wi-Fi Direct, the head unit's existing hotspot, or same-LAN Wi-Fi, plus classic Bluetooth pairing. It does not replace the Android 7+ release APK, and an actual Android 4.2 head unit has not yet been validated. See [Android 4.2 build instructions](docs/BUILD.md#android-42x-experimental-apk).
+
 - Wired USB and wireless CarPlay with local authentication.
 - BYD HUD navigation with arrows, distance and street names on verified firmware.
 - Car hotspot support, improved audio buffering and saved receive diagnostics.

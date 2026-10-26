@@ -20,14 +20,17 @@ internal class ManualHotspotInterfaces(
     private val onDiagnostic: (String) -> Unit = {},
     private val configuredInterface: String? = null,
 ) : Closeable {
-    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private val publicTethering = if (Build.VERSION.SDK_INT >= 36) PublicTethering(context) else null
     private var lastLegacyDiagnostic: String? = null
     private var lastOwnershipDiagnostic: String? = null
 
     fun sample(): HotspotNetworkSnapshot {
-        val before = runCatching { connectivity?.activeNetwork }
+        val before = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) connectivity?.activeNetwork else null
+        }
         val upstreams = runCatching {
+            check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
             checkNotNull(connectivity)
             connectivity.allNetworks.mapNotNull { network ->
                 val caps = checkNotNull(connectivity.getNetworkCapabilities(network))
@@ -56,7 +59,9 @@ internal class ManualHotspotInterfaces(
             upstreams = upstreams,
             defaultInterface = defaultName,
         )
-        val after = runCatching { connectivity?.activeNetwork }
+        val after = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) connectivity?.activeNetwork else null
+        }
         return HotspotNetworkSnapshot(
             interfaces, ap, upstreams, defaultName,
             consistent = before.isSuccess && after.isSuccess && before.getOrNull() == after.getOrNull(),

@@ -49,6 +49,7 @@ import com.shilapi.xcertplay.network.CarPlayVpnService
 import com.shilapi.xcertplay.network.LocalOnlyHotspotManager
 import com.shilapi.xcertplay.network.ManualHotspotManager
 import com.shilapi.xcertplay.network.ExistingWifiManager
+import com.shilapi.xcertplay.network.LegacyExistingWifiManager
 import com.shilapi.xcertplay.network.HotspotAddressPolicy
 import com.shilapi.xcertplay.network.HotspotAddressRecovery
 import com.shilapi.xcertplay.network.WifiP2pGroupManager
@@ -96,6 +97,7 @@ import com.shilapi.xcertplay.transport.LockdownPairingClient
 import com.shilapi.xcertplay.transport.LockdownPairRecord
 import com.shilapi.xcertplay.transport.NcmFunctionDiscovery
 import com.shilapi.xcertplay.transport.NcmUsbBridge
+import com.shilapi.xcertplay.transport.UsbApiCompatibility
 import java.io.Closeable
 import java.io.IOException
 import java.net.InetAddress
@@ -177,9 +179,12 @@ class CarPlayController(
         require(!config.locationReportingEnabled || locationProvider != null) {
             "A location provider is required when location reporting is enabled"
         }
-        WifiScanPause.restoreIfNeeded(context.applicationContext)
-        BydNavigationOutputs.start(context.applicationContext)
-        BydNavigationOutputs.setClusterStreamControl(::applyClusterUi)
+        // API 17 head units have neither the recent BYD cluster services nor their Android APIs.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            WifiScanPause.restoreIfNeeded(context.applicationContext)
+            BydNavigationOutputs.start(context.applicationContext)
+            BydNavigationOutputs.setClusterStreamControl(::applyClusterUi)
+        }
     }
 
     private enum class Phase { IDLE, MFI, WIRELESS, IPHONE, REENUMERATION, DATAPATHS, CONTROL }
@@ -187,9 +192,13 @@ class CarPlayController(
     private val appContext = context.applicationContext
     private val diagnosticAttempt = diagnosticAttempts.incrementAndGet()
     private val diagnosticRun = AtomicInteger()
-    private val usbManager: UsbManager? = context.getSystemService(UsbManager::class.java)
+    private val usbManager: UsbManager? = context.getSystemService(Context.USB_SERVICE) as? UsbManager
     private fun currentBluetoothAdapter(): BluetoothAdapter? =
-        runCatching { appContext.getSystemService(BluetoothManager::class.java)?.adapter }
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+            } else null
+        }
             .getOrNull() ?: runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull()
 
     private fun awaitBluetoothEnabled(adapter: BluetoothAdapter, timeoutMillis: Long = 3_000L): Boolean {
@@ -217,6 +226,10 @@ class CarPlayController(
     }
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val touchExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private data class TouchWork(val session: AirPlaySession, val contacts: List<AirPlayContact>)
+    private val touchDispatcher = LatestMoveDispatcher<TouchWork>(touchExecutor) { work ->
+        if (!closed && activeSession === work.session) work.session.sendTouch(work.contacts)
+    }
     private val tunnelExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hostId = UUID.randomUUID().toString().uppercase(Locale.US)
@@ -357,8 +370,10 @@ class CarPlayController(
             if (currentCornerMask?.session !== session) currentCornerMask = null
             val replacement = activeSession !== session
             if (replacement) {
-                BydNavigationOutputs.start(appContext)
-                BydNavigationOutputs.carPlaySessionStarted()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    BydNavigationOutputs.start(appContext)
+                    BydNavigationOutputs.carPlaySessionStarted()
+                }
                 com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(true)
                 // The gear may have changed since /info.
                 if (videoListener != null) {
@@ -389,8 +404,10 @@ class CarPlayController(
             if (activeSession === session) {
                 activeSession = null
                 synchronized(albumReplayLock) { initialArtworkReplay = null }
-                BydNavigationOutputs.endNow(preserveTurnOverlay = !closed && config.transport == CarPlayTransport.WIRELESS)
-                BydBluetoothSuspend.resume(appContext, this@CarPlayController) { debugLog(it) }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    BydNavigationOutputs.endNow(preserveTurnOverlay = !closed && config.transport == CarPlayTransport.WIRELESS)
+                    BydBluetoothSuspend.resume(appContext, this@CarPlayController) { debugLog(it) }
+                }
                 com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(false)
                 videoListener?.onVideoSessionEnded()
                 synchronized(playbackStatus) {
@@ -537,15 +554,10 @@ class CarPlayController(
         }
     }
 
-    fun sendTouch(contacts: List<AirPlayContact>): Boolean {
+    fun sendTouch(contacts: List<AirPlayContact>, coalesceMove: Boolean = false): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
-        return try {
-            touchExecutor.execute { session.sendTouch(contacts) }
-            true
-        } catch (_: Exception) {
-            false
-        }
+        return touchDispatcher.submit(TouchWork(session, contacts), coalesceMove)
     }
 
     /** Moves CarPlay on the main screen to its declared view area [index], for example another dock edge. */
@@ -675,15 +687,19 @@ class CarPlayController(
         }
         firstTcpWatchdog?.terminate()
         wiredStartWatchdog?.terminate()
-        BydBluetoothSuspend.resume(appContext, this) { debugLog(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            BydBluetoothSuspend.resume(appContext, this) { debugLog(it) }
+        }
         startupTimer.shutdownNow()
         (hotspot as? ManualHotspotManager)?.close()
         val teardownStarted = System.nanoTime()
         connectionDiagnostic("teardown begin transport=${config.transport}")
         videoGate?.close()
-        BydNavigationOutputs.endNow()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) BydNavigationOutputs.endNow()
         com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(false)
-        BydNavigationOutputs.clearClusterStreamControl(::applyClusterUi)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            BydNavigationOutputs.clearClusterStreamControl(::applyClusterUi)
+        }
         closeReceivers()
         availabilityPollGeneration.incrementAndGet()
         permissionPollGeneration += 1
@@ -822,7 +838,7 @@ class CarPlayController(
 
     // HUD (SOME/IP) and cluster (AMap broadcast) keep separate state so one failing cannot stall the other.
     private fun onRouteFrame(frame: com.shilapi.xcertplay.iap2.wire.Iap2Frame) {
-        BydNavigationOutputs.onFrame(frame)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) BydNavigationOutputs.onFrame(frame)
         com.shilapi.xcertplay.glance.CarPlayGlance.onFrame(frame)
         synchronized(playbackStatus) {
             val previousPlaying = playbackStatus.playing
@@ -883,7 +899,13 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         phase = Phase.MFI
         onStatus(CarPlayStatus.DiscoveringMfi)
-        val offlineDirectory = java.io.File(appContext.noBackupFilesDir, LocalMfiAuthenticationClient.DIRECTORY)
+        val privateDirectory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            appContext.noBackupFilesDir
+        } else {
+            appContext.filesDir
+        }
+        val offlineDirectory = config.localMfiDirectory?.let { java.io.File(it) }
+            ?: java.io.File(privateDirectory, LocalMfiAuthenticationClient.DIRECTORY)
         when (config.mfiTarget) {
             MfiTarget.LOCAL -> openLocalMfi(offlineDirectory)
             MfiTarget.USB_CH341 -> {
@@ -910,7 +932,10 @@ class CarPlayController(
     }
 
     private fun openLocalMfi(directory: java.io.File) {
-        debugLog("mfi discovery backend=LocalOffline remoteFallback=disabled")
+        debugLog("mfi discovery backend=LocalOffline remoteFallback=disabled " +
+            "directoryExists=${directory.isDirectory} " +
+            "keyExists=${java.io.File(directory, "identity.pk8").isFile} " +
+            "certificateExists=${java.io.File(directory, "certificate.p7b").isFile}")
         executor.execute {
             try {
                 val signatures = AtomicInteger(0)
@@ -1999,18 +2024,22 @@ class CarPlayController(
                 when (phase) {
                     Phase.REENUMERATION, Phase.IPHONE -> {
                         val configuration = IphoneCarPlayConfiguration.find(result.device)
-                        val carPlayMode = configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true
+                        val legacyMode = Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP &&
+                            IphoneCarPlayConfiguration.isLegacyCarPlayMode(result.device)
+                        val found = configuration != null || legacyMode
+                        val carPlayMode = legacyMode ||
+                            configuration?.let(IphoneCarPlayConfiguration::isCarPlayMode) == true
                         val sessionAlreadyStarted = WiredSessionMemory.startedOn(result.device.deviceName)
                         val action = WiredConfigurationAction.choose(
-                            found = configuration != null,
+                            found = found,
                             carPlayMode = carPlayMode,
                             transitionsTried = reenumerationAttempts,
                             maximumTransitions = MAXIMUM_REENUMERATION_ATTEMPTS,
                             sessionAlreadyStarted = sessionAlreadyStarted,
                         )
                         connectionDiagnostic(
-                            "USB configuration ready=${configuration != null} " +
-                                "configurationId=${configuration?.id ?: "none"} " +
+                            "USB configuration ready=$found " +
+                                "configurationId=${configuration?.id ?: if (legacyMode) "active-api17" else "none"} " +
                                 "reenumerationAttempts=$reenumerationAttempts " +
                                 (if (sessionAlreadyStarted && carPlayMode) "previousSessionOnThisEnumeration=true " else "") +
                                 "action=${action.diagnostic}",
@@ -2021,7 +2050,7 @@ class CarPlayController(
                             WiredConfigurationAction.REQUEST_TRANSITION -> beginReenumeration(
                                 result.device,
                                 WiredConfigurationAction.fallbackAfterRejection(
-                                    configuration != null, carPlayMode, sessionAlreadyStarted),
+                                    found, carPlayMode, sessionAlreadyStarted),
                             )
                             WiredConfigurationAction.REJECT -> fail(
                                 IphoneUsbException.Protocol(
@@ -2172,20 +2201,22 @@ class CarPlayController(
 
     private fun openNcm(device: UsbDevice): NcmUsbBridge {
         val configuration = IphoneCarPlayConfiguration.find(device)
-            ?: throw IphoneUsbException.Protocol(
-                "iPhone exposes no CarPlay configuration for NCM",
-            )
-        val function = NcmFunctionDiscovery.find(configuration)
-            ?: throw IphoneUsbException.Protocol("iPhone configuration does not expose an NCM function")
-        debugLog(
-            "ncm config=${configuration.id} control=${function.control.id}/${function.control.alternateSetting}" +
-                " data=${function.data.id}/${function.data.alternateSetting}" +
-                " status=${function.statusIn?.address?.let { "0x${it.toString(16)}" } ?: "none"}" +
-                " in=0x${function.bulkIn.address.toString(16)} out=0x${function.bulkOut.address.toString(16)}",
-        )
         val connection = requireUsbManager().openDevice(device)
             ?: throw IphoneUsbException.DeviceUnavailable("Could not open the iPhone NCM connection")
-        return NcmUsbBridge.open(connection, function, onDiagnostic = ::connectionDiagnostic)
+        try {
+            val function = NcmFunctionDiscovery.find(device, connection)
+                ?: throw IphoneUsbException.Protocol("iPhone configuration does not expose an NCM function or data alternate")
+            debugLog(
+                "ncm config=${configuration?.id ?: "active-api17"} control=${function.control.id}/${UsbApiCompatibility.alternateSetting(function.control)}" +
+                    " data=${function.data.id}/${UsbApiCompatibility.alternateSetting(function.data, 1)}" +
+                    " status=${function.statusIn?.address?.let { "0x${it.toString(16)}" } ?: "none"}" +
+                    " in=0x${function.bulkIn.address.toString(16)} out=0x${function.bulkOut.address.toString(16)}",
+            )
+            return NcmUsbBridge.open(connection, function, onDiagnostic = ::connectionDiagnostic)
+        } catch (error: Throwable) {
+            connection.close()
+            throw error
+        }
     }
 
     private fun runStack(usbSession: Iap2UsbSession, ncm: NcmUsbBridge) {
@@ -2469,10 +2500,17 @@ class CarPlayController(
                 throw WirelessStartupException(WirelessStartupFailure.HOTSPOT_CONFIGURATION,
                     "Android ${Build.VERSION.RELEASE} has no local-only hotspot. Choose Car hotspot or Wi-Fi Direct.")
             }
-            WirelessHotspotMode.EXISTING_WIFI -> ExistingWifiManager(
-                appContext, config.existingWifiSsid, config.existingWifiPassphrase, ::debugLog,
-                onNetworkChanged = { if (!isStaleWirelessRun(generation)) restartWireless() },
-            )
+            WirelessHotspotMode.EXISTING_WIFI -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                ExistingWifiManager(
+                    appContext, config.existingWifiSsid, config.existingWifiPassphrase, ::debugLog,
+                    onNetworkChanged = { if (!isStaleWirelessRun(generation)) restartWireless() },
+                )
+            } else {
+                LegacyExistingWifiManager(
+                    appContext, config.existingWifiSsid, config.existingWifiPassphrase, ::debugLog,
+                    onNetworkChanged = { if (!isStaleWirelessRun(generation)) restartWireless() },
+                )
+            }
             WirelessHotspotMode.MANUAL -> ManualHotspotManager(
                 context = appContext,
                 ssid = config.manualHotspotSsid

@@ -266,18 +266,24 @@ class IphoneUsbHost(
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         var claimedInterface: UsbInterface? = null
         try {
-            val configuration = IphoneCarPlayConfiguration.find(device)
-                ?: throw IphoneUsbException.Protocol(
+            val legacy = Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP
+            val configuration = if (legacy) null else IphoneCarPlayConfiguration.find(device)
+            // Android 4.2 only lists the current configuration's interfaces. The vendor request
+            // has already switched the phone to CarPlay mode; setConfiguration() does not exist.
+            val usbMux = if (legacy) {
+                IphoneCarPlayConfiguration.legacyUsbMuxInterface(device)
+            } else {
+                val selected = configuration ?: throw IphoneUsbException.Protocol(
                     "Re-enumerated iPhone exposes no USBMUX CarPlay configuration",
                 )
-            connection = selectConfiguration(connection, device, configuration)
-            val usbMux = IphoneCarPlayConfiguration.usbMuxInterface(configuration)
-                ?: throw IphoneUsbException.Protocol("CarPlay configuration exposes no USBMUX interface")
+                connection = selectConfiguration(connection, device, selected)
+                IphoneCarPlayConfiguration.usbMuxInterface(selected)
+            } ?: throw IphoneUsbException.Protocol("CarPlay configuration exposes no USBMUX interface")
             val endpoints = IphoneCarPlayConfiguration.usbMuxEndpoints(usbMux)
                 ?: throw IphoneUsbException.Protocol("USBMUX interface exposes no bulk endpoint pair")
             Log.i(
                 IphoneCarPlayConfiguration.TAG,
-                "usbmux config=${configuration.id} iface=${usbMux.id} alt=${usbMux.alternateSetting} " +
+                "usbmux config=${configuration?.id ?: "active-api17"} iface=${usbMux.id} alt=${UsbApiCompatibility.alternateSetting(usbMux)} " +
                     "class=${usbMux.interfaceClass}/${usbMux.interfaceSubclass}/${usbMux.interfaceProtocol} " +
                     "endpoints=${usbMux.endpointCount} " +
                     "out=${describeUsbEndpoint(endpoints.first)} " +
@@ -362,7 +368,8 @@ class IphoneUsbHost(
             appContext,
             0,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0),
         )
     }
 
@@ -394,8 +401,13 @@ class IphoneUsbHost(
         val read = connection.controlTransfer(
             USB_VENDOR_DEVICE_IN, GET_USB_MODE_REQUEST, 0, 0, mode, mode.size, CONTROL_TRANSFER_TIMEOUT_MILLIS,
         )
-        return usbModeDiagnostic(read, mode, device.version,
-            (0 until device.configurationCount).map(device::getConfiguration).map { "${it.id}[${IphoneCarPlayConfiguration.describe(it)}]" })
+        val legacy = Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP
+        return usbModeDiagnostic(read, mode,
+            if (legacy) null else device.version,
+            if (legacy) listOf("active[interfaces=${device.interfaceCount}]") else
+                (0 until device.configurationCount).map(device::getConfiguration)
+                    .map { "${it.id}[${IphoneCarPlayConfiguration.describe(it)}]" },
+        )
     }
 
     companion object {

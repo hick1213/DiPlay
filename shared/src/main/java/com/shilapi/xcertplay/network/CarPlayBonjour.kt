@@ -171,7 +171,8 @@ class CarPlayBonjour(
             "connectProbe2xx=${successfulProbeCount.get()} lastProbe=${lastProbe.get()} " +
             "mdnsFamilies=$publishedFamilies"
     private val multicastLock = (context.applicationContext ?: context)
-        .getSystemService(WifiManager::class.java)
+        .getSystemService(Context.WIFI_SERVICE).let { it as? WifiManager
+            ?: throw IOException("Android Wi-Fi service is unavailable") }
         .createMulticastLock("carplay-bonjour").apply { setReferenceCounted(false) }
 
     private var started = false

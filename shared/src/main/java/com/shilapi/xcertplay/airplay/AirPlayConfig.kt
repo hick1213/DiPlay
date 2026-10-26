@@ -82,6 +82,8 @@ data class AirPlayConfig(
      * version or absent MediaCodec encoder alone must not remove the wireless Opus formats.
      */
     val microphoneOpus: Boolean = true,
+    /** Do not advertise Opus downlink on older hosts whose audio renderer has no Opus decoder. */
+    val opusAudioOutput: Boolean = true,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",
@@ -98,6 +100,12 @@ data class AirPlayConfig(
      * default stream (#148, #341). When set, 8 and 16 kHz are not offered for default and alert audio.
      */
     val speechWithout8And16Khz: Boolean = false,
+    /**
+     * Whether the accessory is playing its own native audio (for example FM radio).
+     * A dedicated CarPlay display has no native playback to protect: it must release
+     * mainAudio to the iPhone so the iPhone can stream music to Android.
+     */
+    val accessoryOwnsMainAudio: Boolean = true,
 )
 
 /** The offer, SETUP and controls must all honor the user's audio-output setting. */

@@ -1,9 +1,9 @@
 package com.shilapi.xcertplay.transport
 
 import android.annotation.SuppressLint
+import android.os.Build
 import com.shilapi.xcertplay.compat.Base64Compat
 import java.io.ByteArrayInputStream
-import java.nio.charset.StandardCharsets
 import java.security.GeneralSecurityException
 import java.security.KeyFactory
 import java.security.KeyStore
@@ -48,7 +48,11 @@ object LockdownTlsEngineFactory {
             }
             return context.createSSLEngine(PEER_HOST, PEER_PORT).apply {
                 useClientMode = true
-                sslParameters = sslParameters.apply { endpointIdentificationAlgorithm = null }
+                // SSLParameters.setEndpointIdentificationAlgorithm was introduced in API 24.
+                // Android 4.2 already has no endpoint-verification algorithm configured here.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    sslParameters = sslParameters.apply { endpointIdentificationAlgorithm = null }
+                }
             }
         } finally {
             password.fill('\u0000')
@@ -99,6 +103,6 @@ object LockdownTlsEngineFactory {
     private const val KEY_ALIAS = "lockdown-host"
     private const val PEER_HOST = "Device"
     private const val PEER_PORT = 0
-    private val BEGIN_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----".toByteArray(StandardCharsets.US_ASCII)
-    private val END_PRIVATE_KEY = "-----END PRIVATE KEY-----".toByteArray(StandardCharsets.US_ASCII)
+    private val BEGIN_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----".toByteArray(Charsets.US_ASCII)
+    private val END_PRIVATE_KEY = "-----END PRIVATE KEY-----".toByteArray(Charsets.US_ASCII)
 }

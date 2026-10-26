@@ -460,7 +460,7 @@ class NcmUsbBridge internal constructor(
                 val firstClaimed = retryUsbSetup { connection.claimInterface(first, true) }
                 Log.i(
                     IphoneCarPlayConfiguration.TAG,
-                    "claim iface=${first.id}/${first.alternateSetting} class=${first.interfaceClass}" +
+                    "claim iface=${first.id}/${UsbApiCompatibility.alternateSetting(first)} class=${first.interfaceClass}" +
                         " subclass=${first.interfaceSubclass} proto=${first.interfaceProtocol} ok=${firstClaimed != null}" +
                         " attempts=${firstClaimed ?: USB_SETUP_ATTEMPTS}",
                 )
@@ -474,7 +474,7 @@ class NcmUsbBridge internal constructor(
                     val dataClaimed = retryUsbSetup { connection.claimInterface(function.data, true) }
                     Log.i(
                         IphoneCarPlayConfiguration.TAG,
-                        "claim iface=${function.data.id}/${function.data.alternateSetting}" +
+                        "claim iface=${function.data.id}/${UsbApiCompatibility.alternateSetting(function.data, 1)}" +
                             " class=${function.data.interfaceClass} ok=${dataClaimed != null}" +
                             " attempts=${dataClaimed ?: USB_SETUP_ATTEMPTS}",
                     )
@@ -485,10 +485,10 @@ class NcmUsbBridge internal constructor(
                     }
                     claimed.add(function.data)
                 }
-                val altSelected = retryUsbSetup { connection.setInterface(function.data) }
+                val altSelected = retryUsbSetup { UsbApiCompatibility.selectNcmDataAlternate(connection, function.data) }
                 Log.i(
                     IphoneCarPlayConfiguration.TAG,
-                    "setInterface iface=${function.data.id}/${function.data.alternateSetting} ok=${altSelected != null}" +
+                    "select NCM iface=${function.data.id}/${UsbApiCompatibility.alternateSetting(function.data, 1)} ok=${altSelected != null}" +
                         " attempts=${altSelected ?: USB_SETUP_ATTEMPTS}",
                 )
                 if (altSelected == null) {

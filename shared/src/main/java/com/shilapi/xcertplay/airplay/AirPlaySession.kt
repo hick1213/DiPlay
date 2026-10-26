@@ -886,6 +886,13 @@ class AirPlaySession(
             eventCipher = ControlCipher(readKey, writeKey)
             synchronized(eventWriteLock) {
                 sendPendingNightModeLocked()
+                if (!config.accessoryOwnsMainAudio) {
+                    // This receiver is not an FM/native audio source. Do not hold the
+                    // speakers: CarPlay apps need mainAudio owned by the phone to send
+                    // their media RTP/buffered stream to the Android AudioTrack.
+                    val released = sendCommandLocked(AirPlayInfoPlist.releaseMainAudioCommand())
+                    debugLog("CarPlay mainAudio release requested sent=$released")
+                }
             }
             val videoDelivery = videoPlaybackAvailability.setEventReady(true)
             debugLog("airplay video event ready availability=$videoDelivery")
