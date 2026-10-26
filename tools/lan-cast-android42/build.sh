@@ -8,7 +8,7 @@ sdk_dir=${ANDROID_HOME:-"$HOME/Library/Android/sdk"}
 build_tools="$sdk_dir/build-tools/35.0.0"
 android_jar="$sdk_dir/platforms/android-21/android.jar"
 keystore="$HOME/.android/debug.keystore"
-output_apk="$output_dir/lan-cast-android42-v3.apk"
+output_apk="$output_dir/lan-cast-android42-v4.apk"
 
 if [ -e "$output_apk" ]; then
     echo "Preserving existing APK, refusing to overwrite: $output_apk" >&2

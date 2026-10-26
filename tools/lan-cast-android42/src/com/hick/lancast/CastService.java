@@ -69,7 +69,8 @@ public final class CastService extends Service {
     public String getSummary() {
         if (!running) return "已停止";
         return ip.length() == 0 || port == 0 ? "正在启动（" + lastError + "）" :
-            transport + " · http://" + ip + ":" + port + "/device.xml" +
+            ("STOPPED".equals(transport) ? "等待投屏（DLNA STOPPED，接收服务仍在线）" :
+                "播放状态：" + transport) + " · http://" + ip + ":" + port + "/device.xml" +
             (lastError.length() == 0 ? "" : " · " + lastError);
     }
 
@@ -265,7 +266,12 @@ public final class CastService extends Service {
                 if (colon > 0) headers.put(line.substring(0, colon).trim().toLowerCase(), line.substring(colon + 1).trim());
             }
             String method = start[0].toUpperCase(java.util.Locale.US);
-            String path = start[1].split("\\?")[0];
+            String rawPath = start[1].split("\\?")[0];
+            // Some DLNA controllers incorrectly concatenate the URLBase ending in '/'
+            // with service URLs already starting in '/', then request //renderingcontrol.xml.
+            // Accept both spellings; advertise correct relative service URLs below.
+            String path = rawPath.replaceFirst("^/{2,}", "/");
+            if (!path.equals(rawPath)) Log.i(TAG, "DLNA normalized duplicated URL slashes path=" + path);
             Log.i(TAG, "DLNA HTTP method=" + method + " path=" + path +
                 " peer=" + socket.getInetAddress().getHostAddress());
             if ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) {
@@ -284,7 +290,7 @@ public final class CastService extends Service {
                 }
                 Log.i(TAG, "DLNA SOAP action=" + soapAction(headers.get("soapaction"), new String(bodyBytes, "UTF-8")) +
                     " path=" + path);
-                String response = handleSoap(start[1], headers.get("soapaction"), new String(bodyBytes, "UTF-8"));
+                String response = handleSoap(path, headers.get("soapaction"), new String(bodyBytes, "UTF-8"));
                 sendHttp(out, 200, "text/xml; charset=utf-8", response);
             } else if ("SUBSCRIBE".equalsIgnoreCase(start[0])) {
                 String service = eventService(path);
@@ -377,8 +383,10 @@ public final class CastService extends Service {
     private static String serviceDesc(String type, String path) {
         return "<service><serviceType>" + type + "</serviceType>" +
             "<serviceId>urn:upnp-org:serviceId:" + path + "</serviceId>" +
-            "<SCPDURL>/" + path + ".xml</SCPDURL><controlURL>/control/" + path +
-            "</controlURL><eventSubURL>/event/" + path + "</eventSubURL></service>";
+            // URLBase ends with '/', so relative URLs must NOT start with '/'.
+            // Otherwise naive controllers concatenate two slashes and fail capability checks.
+            "<SCPDURL>" + path + ".xml</SCPDURL><controlURL>control/" + path +
+            "</controlURL><eventSubURL>event/" + path + "</eventSubURL></service>";
     }
 
     private static String serviceScpd(String type, String[] actions) {

@@ -15,6 +15,7 @@ import os
 import queue
 import threading
 import unittest
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 TARGET = os.environ.get("LAN_CAST_TEST_HOST")
@@ -52,6 +53,21 @@ class LanCastProtocolTest(unittest.TestCase):
         return reply.status, reply, reply.read()
 
     def test_description_head_and_gena_initial_and_transition(self):
+        status, _, device_xml = self.request("GET", "/device.xml")
+        self.assertEqual(status, 200)
+        root = ET.fromstring(device_xml)
+        ns = {"d": "urn:schemas-upnp-org:device-1-0"}
+        url_base = root.findtext("d:URLBase", namespaces=ns)
+        self.assertTrue(url_base.endswith("/"))
+        services = root.findall(".//d:service", namespaces=ns)
+        self.assertEqual(len(services), 3)
+        for service in services:
+            for tag in ("SCPDURL", "controlURL", "eventSubURL"):
+                relative = service.findtext("d:" + tag, namespaces=ns)
+                self.assertFalse(relative.startswith("/"), (tag, relative))
+                target = urllib.parse.urljoin(url_base, relative)
+                self.assertEqual(target.count("//"), 1, (tag, target))
+
         for path in ("/device.xml", "/avtransport.xml", "/connectionmanager.xml", "/renderingcontrol.xml"):
             status, _, body = self.request("GET", path)
             self.assertEqual(status, 200, path)
@@ -60,6 +76,11 @@ class LanCastProtocolTest(unittest.TestCase):
             self.assertEqual(status, 200, path)
             self.assertEqual(head, b"")
             self.assertEqual(int(reply.getheader("Content-Length")), len(body))
+            # Reproduce Tencent controller's observed URLBase + /SCPDURL bug.
+            if path != "/device.xml":
+                status, _, duplicate = self.request("GET", "/" + path)
+                self.assertEqual(status, 200, "duplicate-slash " + path)
+                self.assertEqual(duplicate, body)
 
         headers = {
             "CALLBACK": f"<http://{CALLBACK_HOST}:{self.server.server_port}/notify>",
